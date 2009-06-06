@@ -1,0 +1,674 @@
+#!/bin/sh
+#
+# MySQL backup tool.
+#
+# $Id: mysqlbackup,v 1.14 2009-03-02 13:11:04 alexey Exp $
+
+# MySQL installation prefix.
+: ${MYSQL_PREFIX="/usr/local"}
+
+# Some default values.
+DEFAULT_ARCHIVE_DAYS=5			# How long to keep backups.
+DEFAULT_ARCHIVE_DIR="/var/backups"	# According to hier(7).
+DEFAULT_MYSQLDUMP_OPTIONS="--opt --skip-lock-tables --quote-names"
+DEFAULT_MYSQLCHECK_OPTIONS=\
+"--auto-repair --check-only-changed --extended --silent"
+DEFAULT_MYSQLOPTIMIZE_OPTIONS="--optimize --silent"
+DEFAULT_COMPRESSOR="bzip2"		# bzip2 | gzip | no
+DEFAULT_DIR_MODE=0700
+DEFAULT_FILE_MODE=0600
+DEFAULT_SAVE_MYCNF="yes"		# Either save my.cnf or not
+DEFAULT_PATH_MYCNF="%%DATADIR%%my.cnf"	# Macros will be replaced
+DEFAULT_CHECK_TABLES="yes"		# yes | no
+DEFAULT_OPTIMIZE_TABLES="yes"		# yes | no
+
+# CHECK TABLE only works for MyISAM, InnoDB, and (as of MySQL 5.0.16+) ARCHIVE
+# tables.  All the `check-ready' engines should be indicated here separated by
+# space character.
+CHECK_READY_ENGINES="MyISAM InnoDB Archive"
+
+# For InnoDB tables, OPTIMIZE TABLE is mapped to ALTER TABLE, which rebuilds
+# the table to update index statistics and free unused space in the clustered
+# index. Beginning with MySQL 5.1.27, this is displayed in the output of
+# OPTIMIZE TABLE.
+OPTIMIZE_READY_ENGINES="MyISAM"
+
+# If a complete line of input is not read while reading the password within
+# given seconds - give up and continue with no password.
+ASK_PASSWORD_TIMEOUT=60
+
+# Configurable options ends here.
+
+OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:vVH"
+
+# Main executables.
+MYSQL="${MYSQL_PREFIX}/bin/mysql"
+MYSQLDUMP="${MYSQL_PREFIX}/bin/mysqldump"
+MYSQLCHECK="${MYSQL_PREFIX}/bin/mysqlcheck"
+MYSQLOPTIMIZE="${MYSQL_PREFIX}/bin/mysqlcheck"
+
+# These keys will be used while invoking mysql(1) program.
+: ${MYSQL_KEYS="--batch --silent"}
+
+# Outputs program usage instructions.
+usage() 
+{
+	me=`basename $0`
+	cat << EOF
+${me} creates everyday MySQL databases backup
+
+Usage: ${me} [OPTIONS] [database [database [ ... ] ]]
+
+Options:
+   -a                Dump all available databases.
+   -u user           User for login if not current user.
+   -h host           Connect to host.
+   -p password       Password to use when connecting to server. You should note
+                     that specifying a password on the command line should be
+                     considered insecure.
+   -P filename|ask   Read clear password from the file or read it from the standard
+                     input. The file must normally not be readable by "other"
+                     and must contain exactly one line.  Password will be
+                     prompted from command line if the special keyword "ask"
+                     specified here.
+   -o option|no      Additional mysqldump option. To specify multiple options
+                     you should repeat this key for each mysqldump-option.  The
+                     default options are: ${DEFAULT_MYSQLDUMP_OPTIONS}.  To not
+                     use the default options force "no" option.
+   -l days           Keep created backups for the specified number of the days.
+                     The default is ${DEFAULT_ARCHIVE_DAYS} days.
+   -d directory      Target directory to archive backups.
+                     The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
+                     need).
+   -z gzip|bzip2|no  Compress dumps with specified program.
+                     The default compressor is ${DEFAULT_COMPRESSOR}(1).  Use
+                     special "no" keyword to disable compressing.
+   -F mode           Create files with given mode access permissions.
+                     The default mode is ${DEFAULT_FILE_MODE}.
+   -D mode           Create directories with given mode access permissions.
+                     The default mode is ${DEFAULT_DIR_MODE}.
+   -m path|yes|no    Save my.cnf config or specify it alternate path.
+                     Default is: ${DEFAULT_SAVE_MYCNF}, ${DEFAULT_PATH_MYCNF}.
+   -C yes|no|keys    Check tables before doing backup or use specified keys
+                     for mysqlcheck(1) program while perfoming check.
+                     Default: ${DEFAULT_CHECK_TABLES},
+                     keys: ${DEFAULT_MYSQLCHECK_OPTIONS}.
+   -O yes|no|keys    Optimize tables before doing backup or use specified keys
+                     for mysqlcheck(1) program while perfoming optimization.
+                     Note that not all table engines supports table
+                     optimization. Please refer to "OPTIMIZE TABLE Syntax"
+                     paragraph of MySQL documentation.
+                     Default: ${DEFAULT_OPTIMIZE_TABLES},
+                     keys: ${DEFAULT_MYSQLOPTIMIZE_OPTIONS}.
+   -v                Be verbose.
+   -V                Print version and exit.
+   -H                Print this help and exit.
+
+Examples:
+
+   ${me}               Do nothing, print help.
+   ${me} -av           Verbose dump all the accessable databases on the local MySQL server.
+   ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
+   ${me} -a -P ask     You are prompted for password to backup all databases.
+
+Report bugs to <alexey@renatasystems.org>
+EOF
+	exit 0
+}
+
+# Outputs program version and exit.
+version() 
+{
+	cat <<EOF
+$(basename $0) %%VERSION%%
+
+Written by Alexey V. Degtyarev
+EOF
+	exit 0
+}
+
+# Helper function to determine given argument either `yes' or `no'.
+# Return exit codes:
+#  0 - given argument in $1 is a `positive' answer
+#  1 - argument is a `negative' answer
+#  2 - neither `positive' nor `negative' argument given
+#  3 - wrong number of arguments given
+check_yesno() 
+{
+	# Accepts exaclty one argument.
+	[ $# -eq 1 ] || return 3
+
+	_value=${1}
+	case ${_value} in
+		[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1) return 0;;
+		[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) return 1;;
+		*) return 2;
+	esac
+
+	# Should not be here ever.
+	return 0
+}
+
+# Set all the variables to their default values.
+set_defaults() 
+{
+	MYSQL_USER=`whoami`
+	MYSQL_HOST=
+	MYSQL_PASSWORD=
+	MYSQL_PASSWORD_FILE=
+	MYSQLDUMP_OPTIONS=${DEFAULT_MYSQLDUMP_OPTIONS}
+	MYSQLCHECK_OPTIONS=${DEFAULT_MYSQLCHECK_OPTIONS}
+	MYSQLOPTIMIZE_OPTIONS=${DEFAULT_MYSQLOPTIMIZE_OPTIONS}
+	MYSQL_ADDOPTIONS=
+	ARCHIVE_DAYS=${DEFAULT_ARCHIVE_DAYS}
+	ARCHIVE_DIR=${DEFAULT_ARCHIVE_DIR}
+	DUMP_ALL="no"
+	DEBUG="no"
+	DUMP_DATABASE=
+	COMPRESSOR=${DEFAULT_COMPRESSOR}
+	FILE_MODE=${DEFAULT_FILE_MODE}
+	DIR_MODE=${DEFAULT_DIR_MODE}
+	SAVE_MYCNF=${DEFAULT_SAVE_MYCNF}
+	PATH_MYCNF=${DEFAULT_PATH_MYCNF}
+	CHECK_TABLES=${DEFAULT_CHECK_TABLES}
+	OPTIMIZE_TABLES=${DEFAULT_OPTIMIZE_TABLES}
+	ONLY_PRINT_VERSION="no"
+	ONLY_PRINT_HELP="no"
+
+	return 0
+}
+
+# Parse given options using builtin getopts function.
+parse_options() 
+{
+	while getopts ${OPTIONS} option $@; do
+		case ${option} in
+			u) MYSQL_USER=${OPTARG};;
+			h) MYSQL_HOST=${OPTARG};;
+			p) MYSQL_PASSWORD=${OPTARG};;
+			P) MYSQL_PASSWORD_FILE=${OPTARG};;
+			l) ARCHIVE_DAYS=${OPTARG};;
+			d) ARCHIVE_DIR=${OPTARG};;
+			a) DUMP_ALL="yes";;
+			v) DEBUG="yes";;
+			F) FILE_MODE=${OPTARG};;
+			D) DIR_MODE=${OPTARG};;
+			C) check_yesno "${OPTARG}";
+			case $? in
+				0) CHECK_TABLES="yes";;
+				1) CHECK_TABLES="no";;
+				*) MYSQLCHECK_OPTIONS=${OPTARG};;
+			esac;;
+			O) check_yesno "${OPTARG}";
+			case $? in
+				0) OPTIMIZE_TABLES="yes";;
+				1) OPTIMIZE_TABLES="no";;
+				*) MYSQLOPTIMIZE_OPTIONS=${OPTARG};;
+			esac;;
+			m) check_yesno "${OPTARG}";
+			case ${OPTARG} in
+				0) SAVE_MYCNF="yes";;
+				1) SAVE_MYCNF="no";;
+				*) PATH_MYCNF=${OPTARG};;
+			esac;;
+			z) case ${OPTARG} in
+				gzip|bzip2) COMPRESSOR=${OPTARG};;
+				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) COMPRESSOR=no;;
+				*) echo "Wrong arg for -c option"; return 1;;
+			esac;;
+			o) case ${OPTARG} in
+				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) MYSQLDUMP_OPTIONS=;;
+				--*) MYSQL_ADDOPTIONS="${MYSQL_ADDOPTIONS} ${OPTARG}";;
+				*) echo "Wrong arg for -o option: ${OPTARG}"; return 1;;
+			esac;;
+			V) ONLY_PRINT_VERSION="yes";;
+			H) ONLY_PRINT_HELP="yes";;
+			?) return 1;;
+		esac
+	done
+	shift $(($OPTIND-1))
+
+	# Take the database name(s) if given in command line.
+	DUMP_DATABASE=$@
+
+	return 0
+}
+
+# This will check then any options set does not conflicts each others and all
+# the necessary options set.
+check_options() 
+{
+	# Was -v or -h keys specified?
+	check_yesno ${ONLY_PRINT_VERSION} && version
+	check_yesno ${ONLY_PRINT_HELP} && usage
+
+	# Check if all binaries exists and is enable to execute.
+	binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
+	for binary in ${binaries}; do
+		if [ ! -x "${binary}" ]; then
+			_str="Binary \`${binary}' not found, "
+			_str="${_str} check your MYSQL_PREFIX path"
+			echo ${_str}
+			echo && return 1
+		fi
+	done
+
+	# Either -a OR explicit database(s) name(s) must be specified, not
+	# both together.
+	if check_yesno "${DUMP_ALL}"; then
+		[ -z "${DUMP_DATABASE}" ] || return 1
+	else
+		[ ! -z "${DUMP_DATABASE}" ] || return 1
+	fi
+
+	# Can't specify both password and password file.
+	if [ ! -z "${MYSQL_PASSWORD}" -a ! -z "${MYSQL_PASSWORD_FILE}" ]; then
+		echo "The -p and -P options are mutually exclusive"
+		echo && return 1
+	fi
+
+	# Check for "ask" keyword and prompt password if keyword given.
+	if echo ${MYSQL_PASSWORD_FILE} |egrep -q "[Aa][Ss][Kk]"; then
+		read -s -p "Password: " -t ${ASK_PASSWORD_TIMEOUT} MYSQL_PASSWORD && \
+			echo || \
+			echo "time out!"
+
+		# Flush password file variable.
+		MYSQL_PASSWORD_FILE=
+	fi
+
+	# Password file given, let's check if it is ok.
+	if [ ! -z "${MYSQL_PASSWORD_FILE}" ]; then
+
+		# Check if item is file and is accessable.
+		if [ ! -f "${MYSQL_PASSWORD_FILE}" -o ! -r "${MYSQL_PASSWORD_FILE}" ]
+		then
+			echo "Can't read password file: ${MYSQL_PASSWORD_FILE}"
+			echo && return 1
+		fi
+
+		# Check permissions: must not be world readable.
+		# First take the file permissions mode as a shell variable.
+		eval `stat -s ${MYSQL_PASSWORD_FILE}`
+
+		# Yeld the last digit and check if `r' bit is set.
+		if [ $((${st_mode##${st_mode%%?}} & 4)) -ne 0 ]; then
+			echo "Password file is readable by others"
+			echo && return 1
+		fi
+
+		# Password file must contain exactly one line (password).
+		_line_count=`wc -l ${MYSQL_PASSWORD_FILE} |tr -d ' '`
+		if [ ${_line_count} -ne 1 ]; then
+			echo "Password file MUST contain exactly one line"
+			echo && return 1
+		fi
+
+		# Seems that the password file is ok, so read it.
+		MYSQL_PASSWORD=`cat ${MYSQL_PASSWORD_FILE}`
+	fi
+
+	return 0
+}
+
+# Output $@ if debug flag is enabled.
+debug() 
+{
+	check_yesno ${DEBUG} || return 0
+	echo "`date +%c` `basename $0` [$$]: $@"
+	return 0
+}
+
+# This will raise error end exit with custom error code if given.
+error()
+{
+	check_yesno ${DEBUG} || debug $@
+	echo "`date +%c` `basename $0` [$$]: $@"
+
+	[ ! -z "$1" ] && code=1 || code=$?
+
+	exit $code
+}
+
+# Clean up directories created. Used by traps while emergency exit.
+cleanup()
+{
+	debug "Cleaning up"
+	rm -r ${BACKUP_DIR} 2>/dev/null
+	exit 0
+}
+
+# Check that MySQL server is available with given credentials.
+check_mysql_connect() 
+{
+	debug "Pinging MySQL..."
+	if ! ${MYSQL} ${MYSQL_AUTH_KEYS} -e "QUIT"; then
+		error "MySQL connect error"
+	fi
+	debug "MySQL ok"
+	return 0
+}
+
+# This function checks either backup my.cnf configuration file or not.
+check_mycnf() 
+{
+	debug "Checking for my.cnf backup"
+
+	# Normalaize variable value.
+	check_yesno ${SAVE_MYCNF}
+	case $? in
+		0) SAVE_MYCNF="yes";;
+		1) SAVE_MYCNF="no";;
+		*) SAVE_MYCNF="no";;
+	esac
+
+	if check_yesno ${SAVE_MYCNF}; then
+
+		# Retrieve the data directory configuration value.
+		datadir=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+					-e "SHOW VARIABLES LIKE '%datadir%';" |\
+				awk '{print $2}'`
+
+		# Replace macros if given in pathname.
+		PATH_MYCNF=`echo ${PATH_MYCNF} |\
+					sed -e "s#%%DATADIR%%#${datadir}#"`
+
+		# The last check - if file is readable, will backup it.
+		if [ -f ${PATH_MYCNF} ]; then
+			debug "Will backup my.cnf from: ${PATH_MYCNF}"
+		else
+			debug "Will not backup my.cnf (no access)"
+			SAVE_MYCNF="no"
+		fi
+	else
+		debug "Will not backup my.cnf"
+	fi
+
+	return 0
+}
+
+# Set and create directory where to save backups based on date or backup
+# number.
+create_target_dir() 
+{	
+	debug "Reading datadir from MySQL"
+	datadir=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+				-e "SHOW VARIABLES LIKE '%datadir%';" |\
+			awk '{print $2}'`
+	debug "MySQL says: ${datadir}"
+	datadir=`basename ${datadir}`
+
+	# We will preserve previous backups untouched.
+	date_suffix=`date +%Y%m%d`
+	max_oneday_backups=20
+
+	# Today's backup already done, take the next directory name.
+	if [ -d "${ARCHIVE_DIR}/${datadir}/${date_suffix}" ]; then
+		i=1
+		while [ $i -le ${max_oneday_backups} ]; do
+			local _d="${ARCHIVE_DIR}/${datadir}/${date_suffix}.$i"
+
+			# Take the first unused name.
+			if [ ! -d ${_d} ]; then
+				date_suffix="${date_suffix}.$i"
+				break
+			fi
+			i=$(($i+1))
+		done
+
+		# Preserve any error with directory naming.
+		[ $i -ge ${max_oneday_backups} ] && ( \
+			_str="Too much similar backups found," && \
+			_str="${_str} consider remove previous backups." && \
+			error ${_str} )
+	fi
+
+	local _dirs="${ARCHIVE_DIR} \
+			${ARCHIVE_DIR}/${datadir} \
+			${ARCHIVE_DIR}/${datadir}/${date_suffix}"
+	
+	# Create directories with given directory mode permissions.
+	for dir in ${_dirs}; do
+		[ -d ${dir} ] && continue
+		debug "Creating directory: ${dir}"
+		if ! mkdir -m ${DIR_MODE} ${dir}; then
+			error "Cant create directory: ${dir}"
+			return 1
+		fi
+	done
+
+	BACKUP_DIR="${ARCHIVE_DIR}/${datadir}/${date_suffix}"
+
+	return 0
+}
+
+# Remove older backups.
+remove_old_backups() 
+{
+	d=$((${ARCHIVE_DAYS} + 1))
+	while [ ${d} -lt $((${ARCHIVE_DAYS} + 30)) ]; do
+		_purge_date=`date -v-${d}d +%Y%m%d`
+		find ${BACKUP_DIR}/../ \
+			-type d \
+			-name "${_purge_date}*" \
+			-maxdepth 1 \
+			-mindepth 1 \
+			-exec rm -r {} \;
+		d=$((${d} + 1))
+	done
+
+	return 0
+}
+
+# Create databases to backup list.
+get_databases() 
+{
+	BACKUP_DATABASES=
+
+	# -a key given?
+	if check_yesno ${DUMP_ALL}; then
+		debug "Reading available databases"
+		BACKUP_DATABASES=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+					-e "SHOW DATABASES;" |\
+				egrep -v ^information_schema$`
+		[ $? -eq 0 ] || error "Can't get available databases"
+
+	else
+		# Select databases by matching pattern.
+		for database in ${DUMP_DATABASE}; do
+			db=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+					-e "SHOW DATABASES LIKE '${database}';"`
+			[ $? -eq 0 ] || error "Can't use database: ${database}"
+			BACKUP_DATABASES="${BACKUP_DATABASES} ${db}"
+		done
+	fi
+
+	count=`echo ${BACKUP_DATABASES} |wc -w |tr -d ' '`
+	[ -z "${count}" ] && count=0
+	debug "Got ${count} databases"
+
+	if [ ${count} -le 0 ]; then
+		debug "Nothing to do, exiting"
+		cleanup
+		exit $?
+	fi
+
+	return 0
+}
+
+# Backup databases.
+do_backup() 
+{
+	[ ! -z "${BACKUP_DATABASES}" ] || return 0
+	case ${COMPRESSOR} in
+		gzip) _compressor="/usr/bin/gzip"; _suffix="sql.gz";;
+		bzip2) _compressor="/usr/bin/bzip2"; _suffix="sql.bz2";;
+		*) _compressor="/bin/cat"; _suffix="sql";;
+	esac
+
+	_check_tables="no"
+	if check_yesno ${CHECK_TABLES}; then
+		_check_tables="yes"
+	fi
+	_optimize_tables="no"
+	if check_yesno ${OPTIMIZE_TABLES}; then
+		_optimize_tables="yes"
+	fi
+
+	db_count=0
+	db_total=`echo ${BACKUP_DATABASES} |wc -w`
+	for db in ${BACKUP_DATABASES}; do
+		db_count=$((${db_count}+1)) 
+		db_left=$((${db_total}-${db_count}))
+		debug "${db}: doing database backup (${db_left} left)"
+
+		# Get tables in database. This is need to check if table engine
+		# allows checking or optimizing
+		tables_total=`${MYSQL} \
+					 ${MYSQL_KEYS} \
+					 ${MYSQL_AUTH_KEYS} \
+					 ${db} \
+					 -e "SHOW TABLES;"`
+
+		# No tables found, nothing to do?
+		tables_total_c=`echo ${tables_total} |wc -w |tr -d ' '`
+		if [ ${tables_total_c} -le 0 ]; then
+			debug "${db}: no tables found, skipping"
+			continue
+		fi
+		debug "${db}: ${tables_total_c} table(s) found in total"
+
+		# Check tables
+		if [ ${_check_tables} = "yes" ]; then
+
+			# Not all tables are ready to check or optimize.
+			# We should trim off such tables from all tables list.
+			local tables_checkready=""
+
+			for engine in ${CHECK_READY_ENGINES}; do
+
+				# Get tables with one of checkready-engine
+				_tables=`${MYSQL} \
+					${MYSQL_KEYS} \
+					${MYSQL_AUTH_KEYS} \
+					${db} \
+					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
+					awk '{print $1}'`
+				
+				# Try another engine if no tables with such engine found.
+				local _tables_c=`echo ${_tables} |wc -w |tr -d ' '`
+				[ ${_tables_c} -eq 0 ] && continue;
+				debug "${db}: check: ${_tables_c} ${engine}-engine table(s)"
+  
+				tables_checkready="${tables_checkready} ${_tables}"
+			done
+
+			tables_checkready_c=`echo ${tables_checkready} |wc -w |tr -d ' '`
+			debug "${db}: check: will try to check ${tables_checkready_c} table(s)"
+
+			# Check tables filtered by engine
+			debug "${db}: check: checking tables"
+			c=0
+			for table in ${tables_checkready}; do
+				if ! ${MYSQLCHECK} \
+					${MYSQLCHECK_OPTIONS} \
+					${MYSQL_AUTH_KEYS} \
+					${db} ${table}; then
+					debug "${db}: check: ${table} check fail"
+				fi
+				c=$((c+1))
+				#debug "${db}: check: ${table} check ok"
+			done
+			debug "${db}: check: checked ${c} table(s)"
+		fi
+
+		# Optimize tables.
+		if [ ${_optimize_tables} = "yes" ]; then
+
+			# Collect OPTIMIZE-ready tables names into tables_optimizeready
+			# array.
+			local tables_optimizeready=""
+
+			# Foreach engines that has known compatibility with OPTIMIZE.
+			for engine in ${OPTIMIZE_READY_ENGINES}; do
+
+				# Get tables with one of the optimize-ready engine.
+				_tables=`${MYSQL} \
+					${MYSQL_KEYS} \
+					${MYSQL_AUTH_KEYS} \
+					${db} \
+					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
+					awk '{print $1}'`
+				
+				# Try another engine if no tables with such engine found.
+				_tables_c=`echo ${_tables} |wc -w |tr -d ' '`
+				[ ${_tables_c} -eq 0 ] && continue;
+				debug "${db}: optimize: ${_tables_c} ${engine}-engine table(s)"
+
+				# Catenate arrays with previous search results (if was).
+				tables_optimizeready="${tables_optimizeready} ${_tables}"
+			done
+
+			tables_optimizeready_c=`echo ${tables_optimizeready} |wc -w |tr -d ' '`
+			debug "${db}: optimize: will try to optimize ${tables_optimizeready_c} table(s)"
+
+			# Check tables filtered by engine.
+			c=0
+			for table in ${tables_optimizeready}; do
+				if ! ${MYSQLOPTIMIZE} \
+					${MYSQLOPTIMIZE_OPTIONS} \
+					${MYSQL_AUTH_KEYS} \
+					${db} ${table}; then
+					debug "${db}: optimize: table ${table} optimizing failed"
+				fi
+				c=$((c+1))
+				#debug "${db}: ${table} optimize ok"
+			done
+			debug "${db}: optimize: optimized ${c} table(s)"
+		fi
+
+		# Invoke mysqldump(1) for database
+		debug "${db}: dumping"
+		${MYSQLDUMP} \
+			${MYSQLDUMP_OPTIONS} \
+			${MYSQL_AUTH_KEYS} \
+			${db} |\
+		${_compressor} >"${BACKUP_DIR}/${db}.${_suffix}"
+
+		# Set file mode
+		chmod ${FILE_MODE} "${BACKUP_DIR}/${db}.${_suffix}"
+	done
+
+	# Backup my.cnf
+	if check_yesno ${SAVE_MYCNF}; then
+		mycnf=`basename ${PATH_MYCNF}`
+		debug "Backup my.cnf: ${PATH_MYCNF} -> ${BACKUP_DIR}/${mycnf}"
+		cp ${PATH_MYCNF} ${BACKUP_DIR}/${mycnf}
+		chmod ${FILE_MODE} ${BACKUP_DIR}/${mycnf}
+	fi
+}
+
+# The main cycle.
+main() 
+{
+	debug "Ready"
+	check_mysql_connect || return $?
+	create_target_dir || return $?
+	check_mycnf || return $?
+	remove_old_backups || return $?
+	get_databases || return $?
+	do_backup || return $?
+	debug "Done"
+	return 0
+}
+
+set_defaults
+[ $# -ne 0 ] && parse_options $@ && check_options || usage exit
+
+# Define authorization credentials.
+MYSQL_AUTH_KEYS=\
+"--user=${MYSQL_USER} --password=${MYSQL_PASSWORD} --host=${MYSQL_HOST}"
+
+trap cleanup SIGINT SIGTERM
+
+main
