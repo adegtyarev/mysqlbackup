@@ -111,21 +111,13 @@ Options:
 
 Examples:
 
-   mysqlbackup       Do nothing, print help.
+   ${me}               Do nothing, print help.
+   ${me} -av           Verbose dump all the accessible databases on the local MySQL server.
+   ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
+   ${me} -a -P ask     You are prompted for password to backup all the databases.
 
-   mysqlbackup -av   Verbose dump all the accessible databases on the local
-                     MySQL server.
-
-   mysqlbackup -c no mysql
-                     Backup MySQL system database without output dump being
-                     compressed.
-
-   mysqlbackup -a -p -h host
-		     You are prompted for password to backup all the databases
-		     from remote MySQL-server named \`host'.
-
-   Just add command with parameters to your crontab(1) to create regular MySQL
-   backups.
+Just add command with parameters to your crontab(1) to create regular MySQL
+backups.
 
 Report bugs to <alexey@renatasystems.org>
 EOF
