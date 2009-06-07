@@ -21,6 +21,8 @@ DEFAULT_SAVE_MYCNF="yes"		# Either save my.cnf or not
 DEFAULT_PATH_MYCNF="%%DATADIR%%my.cnf"	# Macros will be replaced
 DEFAULT_CHECK_TABLES="yes"		# yes | no
 DEFAULT_OPTIMIZE_TABLES="yes"		# yes | no
+DEFAULT_LOCKFILE="/var/tmp/mysqlbackup.lock"	# Path to lockfile.
+DEFAULT_LOCKFILE_EXPIRE=90000		# Seconds to expire lockfile.
 
 # CHECK TABLE only works for MyISAM, InnoDB, and (as of MySQL 5.0.16+) ARCHIVE
 # tables.  All the `check-ready' engines should be indicated here separated by
@@ -39,7 +41,7 @@ ASK_PASSWORD_TIMEOUT=60
 
 # Configurable options ends here.
 
-OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:vVH"
+OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:vVH"
 
 # Main executables.
 MYSQL="${MYSQL_PREFIX}/bin/mysql"
@@ -100,6 +102,10 @@ Options:
                      paragraph of MySQL documentation.
                      Default: ${DEFAULT_OPTIMIZE_TABLES},
                      keys: ${DEFAULT_MYSQLOPTIMIZE_OPTIONS}.
+   -L lockfile       Alternate default path to lockfile (${DEFAULT_LOCKFILE}).
+   -t seconds        Timeout in seconds to expire existing lockfile.
+                     By default lockfile expires after ${DEFAULT_LOCKFILE_EXPIRE}
+                     seconds.
    -v                Be verbose.
    -V                Print version and exit.
    -H                Print this help and exit.
@@ -107,7 +113,7 @@ Options:
 Examples:
 
    ${me}               Do nothing, print help.
-   ${me} -av           Verbose dump all the accessable databases on the local MySQL server.
+   ${me} -av           Verbose dump all the accessible databases on the local MySQL server.
    ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
    ${me} -a -P ask     You are prompted for password to backup all databases.
 
@@ -138,14 +144,105 @@ check_yesno()
 	# Accepts exaclty one argument.
 	[ $# -eq 1 ] || return 3
 
-	_value=${1}
-	case ${_value} in
+	case $1 in
 		[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1) return 0;;
 		[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) return 1;;
 		*) return 2;
 	esac
 
 	# Should not be here ever.
+	return 0
+}
+
+# Check for locking: if lockfile found and it has not expired yet - give up
+# with error. Expire lockfile in other case.
+check_lockfile()
+{
+	[ -f "${LOCKFILE}" ] || return 0
+
+	# Get file stats.
+	eval `stat -s ${LOCKFILE}`
+
+	# Check that lockfile mtime is older than LOCKFILE_EXPIRE seconds. If
+	# it does - expire it and set the new one. If lockfile is not expired -
+	# this could mean that another process still running, so we give up.
+	if [ ${st_mtime} -lt $((`date +%s`-${LOCKFILE_EXPIRE})) ]; then
+		if ! touch_lockfile; then
+			echo "Can not expire lockfile (${LOCKFILE})."
+			return 2
+		else
+			echo "Lockfile expired (unclean shutdown previous time?)"
+			return 0
+		fi
+	# Check than process id saved in LOCKFILE is a real process.
+	elif check_process ${LOCKFILE}; then
+		echo "Lockfile found. Another process is still running?"
+		return 1
+	# Process running with stored pid is not me.
+	elif ! touch_lockfile; then
+		echo "Can not release lockfile ($?)"
+		return 1
+	# Releasing lockfile.
+	else
+		echo "Lockfile released (unclead shutdown previous time?)"
+		return 0
+	fi
+
+	return 0
+}
+
+check_process()
+{
+	[ $# -eq 1 ] || return 1
+	[ ! -z $1 ] || return 1
+	[ -f $1 -a -r $1 ] || return 1
+
+	# Take the process name and arguments from process tree.
+	# Linux users need to use some other command.
+	_procname="`pgrep -j none -F $1 -l -f`"
+	if [ $? -ne 0 ]; then
+		return 3
+	fi
+
+# 14659 /bin/sh /usr/local/bin/mysqlbackup -a
+	set -- ${_procname}
+
+	# Take the basename of interpreter running puppetd instance we got from
+	# process list.
+	_running_interpreter=${2##*/}
+
+	# And take the interpreter from the executable script.
+	read _interpreter < $3
+	case "${_interpreter}" in
+		# strip #!
+		\#!*) _interpreter=${_interpreter#\#!}
+		set -- ${_interpreter}
+		_interpreter=${_interpreter##*/}
+		;;
+		*) _interpreter="/nonexistent"
+		;;
+	esac
+
+	# Compare two interpretators from ps list and from executable script.
+	if [ ${_running_interpreter} != ${_interpreter} ]; then
+		return 4
+	fi
+
+	return 0
+}
+
+# Write down to lockfile current process id.
+touch_lockfile()
+{
+	echo $$ >${LOCKFILE} || return $?
+	return 0
+}
+
+# Release lockfile while normal program exit.
+release_lockfile()
+{
+	[ -f ${LOCKFILE} ] || return 1
+	rm ${LOCKFILE} || return $?
 	return 0
 }
 
@@ -172,6 +269,8 @@ set_defaults()
 	PATH_MYCNF=${DEFAULT_PATH_MYCNF}
 	CHECK_TABLES=${DEFAULT_CHECK_TABLES}
 	OPTIMIZE_TABLES=${DEFAULT_OPTIMIZE_TABLES}
+	LOCKFILE=${DEFAULT_LOCKFILE}
+	LOCKFILE_EXPIRE=${DEFAULT_LOCKFILE_EXPIRE}
 	ONLY_PRINT_VERSION="no"
 	ONLY_PRINT_HELP="no"
 
@@ -190,7 +289,6 @@ parse_options()
 			l) ARCHIVE_DAYS=${OPTARG};;
 			d) ARCHIVE_DIR=${OPTARG};;
 			a) DUMP_ALL="yes";;
-			v) DEBUG="yes";;
 			F) FILE_MODE=${OPTARG};;
 			D) DIR_MODE=${OPTARG};;
 			C) check_yesno "${OPTARG}";
@@ -221,6 +319,9 @@ parse_options()
 				--*) MYSQL_ADDOPTIONS="${MYSQL_ADDOPTIONS} ${OPTARG}";;
 				*) echo "Wrong arg for -o option: ${OPTARG}"; return 1;;
 			esac;;
+			L) LOCKFILE=${OPTARG};;
+			t) LOCKFILE_EXPIRE=${OPTARG};;
+			v) DEBUG="yes";;
 			V) ONLY_PRINT_VERSION="yes";;
 			H) ONLY_PRINT_HELP="yes";;
 			?) return 1;;
@@ -281,7 +382,8 @@ check_options()
 	if [ ! -z "${MYSQL_PASSWORD_FILE}" ]; then
 
 		# Check if item is file and is accessable.
-		if [ ! -f "${MYSQL_PASSWORD_FILE}" -o ! -r "${MYSQL_PASSWORD_FILE}" ]
+		if [ ! -f "${MYSQL_PASSWORD_FILE}" -o \
+			! -r "${MYSQL_PASSWORD_FILE}" ]
 		then
 			echo "Can't read password file: ${MYSQL_PASSWORD_FILE}"
 			echo && return 1
@@ -308,6 +410,12 @@ check_options()
 		MYSQL_PASSWORD=`cat ${MYSQL_PASSWORD_FILE}`
 	fi
 
+	# Check the lockfile timeout: should be greater than zero.
+	[ "${LOCKFILE_EXPIRE}" -gt 0 ] >/dev/null 2>&1 ||\
+		{ echo "Timeout value must be numeric number of seconds" &&
+		echo && return 1; }
+
+	# Seems that all is ok.
 	return 0
 }
 
@@ -334,7 +442,13 @@ error()
 cleanup()
 {
 	debug "Cleaning up"
+
+	# Remove backup directory we have just created.
 	rm -r ${BACKUP_DIR} 2>/dev/null
+
+	# Release lockfile.
+	release_lockfile
+
 	exit 0
 }
 
@@ -500,11 +614,21 @@ get_databases()
 do_backup() 
 {
 	[ ! -z "${BACKUP_DATABASES}" ] || return 0
+
+	# Select correct compressor program and suffix.
 	case ${COMPRESSOR} in
-		gzip) _compressor="/usr/bin/gzip"; _suffix="sql.gz";;
-		bzip2) _compressor="/usr/bin/bzip2"; _suffix="sql.bz2";;
-		*) _compressor="/bin/cat"; _suffix="sql";;
+		gzip) _compressor=`which gzip || echo cat`;
+		_suffix="sql.gz";;
+		bzip2) _compressor=`which bzip2 || echo cat`;
+		_suffix="sql.bz2";;
+		*) _compressor=`which cat`; _suffix="sql";;
 	esac
+
+	[ -z "${_compressor}" -o ! -x "${_compressor}" ] && \
+		error "Can not find compressor or any pager program"
+
+	[ "${_compressor}" = "cat" ] && _suffix="sql"
+	debug "Using \`${_compressor}' program as compressor"
 
 	_check_tables="no"
 	if check_yesno ${CHECK_TABLES}; then
@@ -634,6 +758,7 @@ do_backup()
 			${MYSQL_AUTH_KEYS} \
 			${db} |\
 		${_compressor} >"${BACKUP_DIR}/${db}.${_suffix}"
+		debug "${db}: dumped"
 
 		# Set file mode
 		chmod ${FILE_MODE} "${BACKUP_DIR}/${db}.${_suffix}"
@@ -658,12 +783,16 @@ main()
 	remove_old_backups || return $?
 	get_databases || return $?
 	do_backup || return $?
+	release_lockfile || return $?
 	debug "Done"
 	return 0
 }
 
 set_defaults
-[ $# -ne 0 ] && parse_options $@ && check_options || usage exit
+
+[ $# -ne 0 ] && parse_options $@ && check_options || usage
+
+check_lockfile && touch_lockfile || exit 
 
 # Define authorization credentials.
 MYSQL_AUTH_KEYS=\

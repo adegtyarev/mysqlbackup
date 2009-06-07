@@ -1,3 +1,5 @@
+$Id$
+
 [SEE ALSO]
 .BR mysqldump (1),
 .BR mysqlcheck (1),
@@ -7,3 +9,8 @@
 \fBMYSQL_PREFIX\fR environment variable specifies your MySQL
 installation prefix. All used MySQL binaries (mysqldump, mysql, mysqlcheck)
 will be searched within this prefix at `bin' directory.
+
+[AVAILABILITY]
+The latest version of this distribution is available on-line from:
+
+    http://www.renatasystems.org/freebsd/mysqlbackup.html
