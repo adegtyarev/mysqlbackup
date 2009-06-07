@@ -66,13 +66,12 @@ Options:
    -u user           User for login if not current user.
    -h host           Connect to host.
    -p password       Password to use when connecting to server. You should note
-                     that specifying a password on the command line should be
-                     considered insecure.
-   -P filename|ask   Read clear password from the file or read it from the standard
-                     input. The file must normally not be readable by "other"
-                     and must contain exactly one line.  Password will be
-                     prompted from command line if the special keyword "ask"
-                     specified here.
+		     that specifying a password on the command line should be
+		     considered insecure.
+   -P filename|ask   Read the clear password from the file. The file must
+		     normally not be readable by "others" and must contain
+		     exactly one line. Password will be prompted from the
+		     command line if the special keyword "ask" specified here.
    -o option|no      Additional mysqldump option. To specify multiple options
                      you should repeat this key for each mysqldump-option.  The
                      default options are: ${DEFAULT_MYSQLDUMP_OPTIONS}.  To not
@@ -112,12 +111,21 @@ Options:
 
 Examples:
 
-   ${me}               Do nothing, print help.
-   ${me} -av           Verbose dump all the accessible databases on the local MySQL server.
-   ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
-   ${me} -a -P ask     You are prompted for password to backup all databases.
+   mysqlbackup       Do nothing, print help.
 
-   Just add command with parameters to your crontab(1) to create regular MySQL backups.
+   mysqlbackup -av   Verbose dump all the accessible databases on the local
+                     MySQL server.
+
+   mysqlbackup -c no mysql
+                     Backup MySQL system database without output dump being
+                     compressed.
+
+   mysqlbackup -a -p -h host
+		     You are prompted for password to backup all the databases
+		     from remote MySQL-server named \`host'.
+
+   Just add command with parameters to your crontab(1) to create regular MySQL
+   backups.
 
 Report bugs to <alexey@renatasystems.org>
 EOF
@@ -313,13 +321,17 @@ parse_options()
 			esac;;
 			z) case ${OPTARG} in
 				gzip|bzip2) COMPRESSOR=${OPTARG};;
-				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) COMPRESSOR=no;;
+				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
+				COMPRESSOR=no;;
 				*) echo "Wrong arg for -c option"; return 1;;
 			esac;;
 			o) case ${OPTARG} in
-				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) MYSQLDUMP_OPTIONS=;;
-				--*) MYSQL_ADDOPTIONS="${MYSQL_ADDOPTIONS} ${OPTARG}";;
-				*) echo "Wrong arg for -o option: ${OPTARG}"; return 1;;
+				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
+				MYSQLDUMP_OPTIONS=;;
+				--*)
+				MYSQL_ADDOPTIONS="${MYSQL_ADDOPTIONS} ${OPTARG}";;
+				*) echo "Wrong arg for -o option: ${OPTARG}";
+				return 1;;
 			esac;;
 			L) LOCKFILE=${OPTARG};;
 			t) LOCKFILE_EXPIRE=${OPTARG};;
@@ -365,16 +377,29 @@ check_options()
 	fi
 
 	# Can't specify both password and password file.
-	if [ ! -z "${MYSQL_PASSWORD}" -a ! -z "${MYSQL_PASSWORD_FILE}" ]; then
+	if [ ! -z "${MYSQL_PASSWORD}" -a \
+		! -z "${MYSQL_PASSWORD_FILE}" ]; then
 		echo "The -p and -P options are mutually exclusive"
 		echo && return 1
 	fi
 
 	# Check for "ask" keyword and prompt password if keyword given.
 	if echo ${MYSQL_PASSWORD_FILE} |egrep -q "[Aa][Ss][Kk]"; then
-		read -s -p "Password: " -t ${ASK_PASSWORD_TIMEOUT} MYSQL_PASSWORD && \
+		# Preserve all the current settings for the terminal.
+		_stty=$(stty -g)
+
+		# Do not echo back every character typed while reading the
+		# password.
+		stty -echo
+
+		# Read the password.
+		read -p "Password: " \
+			-t ${ASK_PASSWORD_TIMEOUT} MYSQL_PASSWORD && \
 			echo || \
 			echo "time out!"
+
+		# Restore terminal settings.
+		stty ${_stty}
 
 		# Flush password file variable.
 		MYSQL_PASSWORD_FILE=
@@ -450,6 +475,9 @@ cleanup()
 
 	# Release lockfile.
 	release_lockfile
+
+	# Release `exit' trap to avoid cleanup loop.
+	trap - EXIT
 
 	exit 0
 }
@@ -593,7 +621,7 @@ get_databases()
 		# Select databases by matching pattern.
 		for database in ${DUMP_DATABASE}; do
 			db=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
-					-e "SHOW DATABASES LIKE '${database}';"`
+				-e "SHOW DATABASES LIKE '${database}';"`
 			[ $? -eq 0 ] || error "Can't use database: ${database}"
 			BACKUP_DATABASES="${BACKUP_DATABASES} ${db}"
 		done
