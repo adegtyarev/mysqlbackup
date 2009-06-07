@@ -304,7 +304,7 @@ parse_options()
 				*) MYSQLOPTIMIZE_OPTIONS=${OPTARG};;
 			esac;;
 			m) check_yesno "${OPTARG}";
-			case ${OPTARG} in
+			case $? in
 				0) SAVE_MYCNF="yes";;
 				1) SAVE_MYCNF="no";;
 				*) PATH_MYCNF=${OPTARG};;
@@ -798,6 +798,6 @@ check_lockfile && touch_lockfile || exit
 MYSQL_AUTH_KEYS=\
 "--user=${MYSQL_USER} --password=${MYSQL_PASSWORD} --host=${MYSQL_HOST}"
 
-trap cleanup SIGINT SIGTERM
+trap cleanup SIGINT SIGTERM EXIT
 
 main
