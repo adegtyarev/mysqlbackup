@@ -63,7 +63,7 @@ Usage: ${me} [OPTIONS] [database [database [ ... ] ]]
 
 Options:
    -a                Dump all available databases.
-   -u user           User for login if not current user.
+   -u user           The MySQL user name to use when connecting to the server.
    -h host           Connect to host.
    -p password       Password to use when connecting to server. You should note
 		     that specifying a password on the command line should be
@@ -128,7 +128,7 @@ EOF
 version() 
 {
 	cat <<EOF
-$(basename $0) %%VERSION%%
+$(basename $0) 2.1
 
 Written by Alexey V. Degtyarev
 EOF
@@ -251,7 +251,7 @@ release_lockfile()
 # Set all the variables to their default values.
 set_defaults() 
 {
-	MYSQL_USER=`whoami`
+	MYSQL_USER=
 	MYSQL_HOST=
 	MYSQL_PASSWORD=
 	MYSQL_PASSWORD_FILE=
@@ -259,6 +259,7 @@ set_defaults()
 	MYSQLCHECK_OPTIONS=${DEFAULT_MYSQLCHECK_OPTIONS}
 	MYSQLOPTIMIZE_OPTIONS=${DEFAULT_MYSQLOPTIMIZE_OPTIONS}
 	MYSQL_ADDOPTIONS=
+	MYSQL_AUTH_KEYS=
 	ARCHIVE_DAYS=${DEFAULT_ARCHIVE_DAYS}
 	ARCHIVE_DIR=${DEFAULT_ARCHIVE_DIR}
 	DUMP_ALL="no"
@@ -429,6 +430,22 @@ check_options()
 		MYSQL_PASSWORD=`cat ${MYSQL_PASSWORD_FILE}`
 	fi
 
+	# Keep entered password in secure: use MySQL option
+	# --defaults-extra-file to read MySQL client configuration.
+	if [ ! -z "${MYSQL_PASSWORD}" ]; then
+
+		# This will create temporary file only accessable by creator.
+		MYSQL_EXTRA_FILE=`mktemp /var/tmp/mysqlbackup.XXXXXX` || \
+		{ echo "Cannot create temporary file"; echo && return 1; }
+
+		# Write the password.
+		echo -e "[client]\npassword=${MYSQL_PASSWORD}\n" \
+			>>${MYSQL_EXTRA_FILE}
+
+		MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} \
+			--defaults-extra-file=${MYSQL_EXTRA_FILE}"
+	fi
+
 	# Check the lockfile timeout: should be greater than zero.
 	[ "${LOCKFILE_EXPIRE}" -gt 0 ] >/dev/null 2>&1 ||\
 		{ echo "Timeout value must be numeric number of seconds" &&
@@ -468,6 +485,9 @@ cleanup()
 	# Release lockfile.
 	release_lockfile
 
+	# Remove extra defaults options.
+	[ -f ${MYSQL_EXTRA_FILE} ] && rm -f ${MYSQL_EXTRA_FILE}
+
 	# Release `exit' trap to avoid cleanup loop.
 	trap - EXIT
 
@@ -501,7 +521,7 @@ check_mycnf()
 	if check_yesno ${SAVE_MYCNF}; then
 
 		# Retrieve the data directory configuration value.
-		datadir=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+		datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
 					-e "SHOW VARIABLES LIKE '%datadir%';" |\
 				awk '{print $2}'`
 
@@ -528,7 +548,7 @@ check_mycnf()
 create_target_dir() 
 {	
 	debug "Reading datadir from MySQL"
-	datadir=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+	datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
 				-e "SHOW VARIABLES LIKE '%datadir%';" |\
 			awk '{print $2}'`
 	debug "MySQL says: ${datadir}"
@@ -604,7 +624,7 @@ get_databases()
 	# -a key given?
 	if check_yesno ${DUMP_ALL}; then
 		debug "Reading available databases"
-		BACKUP_DATABASES=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+		BACKUP_DATABASES=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
 					-e "SHOW DATABASES;" |\
 				egrep -v ^information_schema$`
 		[ $? -eq 0 ] || error "Can't get available databases"
@@ -612,7 +632,7 @@ get_databases()
 	else
 		# Select databases by matching pattern.
 		for database in ${DUMP_DATABASE}; do
-			db=`${MYSQL} ${MYSQL_KEYS} ${MYSQL_AUTH_KEYS} \
+			db=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
 				-e "SHOW DATABASES LIKE '${database}';"`
 			[ $? -eq 0 ] || error "Can't use database: ${database}"
 			BACKUP_DATABASES="${BACKUP_DATABASES} ${db}"
@@ -671,10 +691,10 @@ do_backup()
 		# Get tables in database. This is need to check if table engine
 		# allows checking or optimizing
 		tables_total=`${MYSQL} \
-					 ${MYSQL_KEYS} \
-					 ${MYSQL_AUTH_KEYS} \
-					 ${db} \
-					 -e "SHOW TABLES;"`
+				${MYSQL_AUTH_KEYS} \
+				${MYSQL_KEYS} \
+				${db} \
+				-e "SHOW TABLES;"`
 
 		# No tables found, nothing to do?
 		tables_total_c=`echo ${tables_total} |wc -w |tr -d ' '`
@@ -695,8 +715,8 @@ do_backup()
 
 				# Get tables with one of checkready-engine
 				_tables=`${MYSQL} \
-					${MYSQL_KEYS} \
 					${MYSQL_AUTH_KEYS} \
+					${MYSQL_KEYS} \
 					${db} \
 					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
 					awk '{print $1}'`
@@ -740,8 +760,8 @@ do_backup()
 
 				# Get tables with one of the optimize-ready engine.
 				_tables=`${MYSQL} \
-					${MYSQL_KEYS} \
 					${MYSQL_AUTH_KEYS} \
+					${MYSQL_KEYS} \
 					${db} \
 					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
 					awk '{print $1}'`
@@ -762,8 +782,8 @@ do_backup()
 			c=0
 			for table in ${tables_optimizeready}; do
 				if ! ${MYSQLOPTIMIZE} \
-					${MYSQLOPTIMIZE_OPTIONS} \
 					${MYSQL_AUTH_KEYS} \
+					${MYSQLOPTIMIZE_OPTIONS} \
 					${db} ${table}; then
 					debug "${db}: optimize: table ${table} optimizing failed"
 				fi
@@ -776,8 +796,8 @@ do_backup()
 		# Invoke mysqldump(1) for database
 		debug "${db}: dumping"
 		${MYSQLDUMP} \
-			${MYSQLDUMP_OPTIONS} \
 			${MYSQL_AUTH_KEYS} \
+			${MYSQLDUMP_OPTIONS} \
 			${db} |\
 		${_compressor} >"${BACKUP_DIR}/${db}.${_suffix}"
 		debug "${db}: dumped"
@@ -816,9 +836,11 @@ set_defaults
 
 check_lockfile && touch_lockfile || exit 
 
-# Define authorization credentials.
-MYSQL_AUTH_KEYS=\
-"--user=${MYSQL_USER} --password=${MYSQL_PASSWORD} --host=${MYSQL_HOST}"
+# Define authorization credentials if they are set.
+[ ! -z ${MYSQL_USER} ] && MYSQL_AUTH_KEYS="--user=${MYSQL_USER}"
+
+[ ! -z ${MYSQL_HOST} ] && \
+	MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --host=${MYSQL_HOST}"
 
 trap cleanup SIGINT SIGTERM EXIT
 
