@@ -128,7 +128,7 @@ EOF
 version() 
 {
 	cat <<EOF
-$(basename $0) 2.1
+$(basename $0) %%VERSION%%
 
 Written by Alexey V. Degtyarev
 EOF
