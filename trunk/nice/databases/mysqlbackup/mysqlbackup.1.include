@@ -10,11 +10,6 @@ $Id$
 installation prefix. All used MySQL binaries (mysqldump, mysql, mysqlcheck)
 will be searched within this prefix at `bin' directory.
 
-[AVAILABILITY]
-The latest version of this distribution is available on-line from:
-
-    http://www.renatasystems.org/freebsd/mysqlbackup.html
-
 [SECURITY]
 You should keep your password in secure.
 
@@ -27,9 +22,15 @@ Store your password in an option file. For example, on Unix you can list your
 password in the [client] section of the 
 .B .my.cnf
 file in your home directory:
-.IP
-[client]
-password=your_pass
+.IP 
+ [client]
+ password=your_pass
 .PP
 To keep the password safe, the file should not be accessible to anyone but
 yourself. To ensure this, set the file access mode to \fB400\fR or \fB600\fR.
+
+[AVAILABILITY]
+The latest version of this distribution is available on-line from:
+
+    http://www.renatasystems.org/freebsd/mysqlbackup.html
+
