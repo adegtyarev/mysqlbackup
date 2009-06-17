@@ -420,7 +420,8 @@ check_options()
 		fi
 
 		# Password file must contain exactly one line (password).
-		_line_count=`wc -l ${MYSQL_PASSWORD_FILE} |tr -d ' '`
+		_line_count=`wc -l ${MYSQL_PASSWORD_FILE} |awk '{print $1}' |\
+			tr -d ' '`
 		if [ ${_line_count} -ne 1 ]; then
 			echo "Password file MUST contain exactly one line"
 			echo && return 1
