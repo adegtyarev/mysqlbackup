@@ -121,6 +121,10 @@ backups.
 
 Report bugs to <alexey@renatasystems.org>
 EOF
+
+	# Do not debug after usage() exit while cleanup().
+	DEBUG="no"
+
 	exit 0
 }
 
@@ -132,6 +136,10 @@ $(basename $0) %%VERSION%%
 
 Written by Alexey V. Degtyarev
 EOF
+
+	# Do not debug cleanup() trap.
+	DEBUG="no"
+
 	exit 0
 }
 
@@ -206,7 +214,7 @@ check_process()
 		return 3
 	fi
 
-# 14659 /bin/sh /usr/local/bin/mysqlbackup -a
+	# 14659 /bin/sh /usr/local/bin/mysqlbackup -a
 	set -- ${_procname}
 
 	# Take the basename of interpreter running puppetd instance we got from
@@ -243,8 +251,17 @@ touch_lockfile()
 # Release lockfile while normal program exit.
 release_lockfile()
 {
-	[ -f ${LOCKFILE} ] || return 1
-	rm ${LOCKFILE} || return $?
+	debug "Releasing lockfile"
+	
+	if [ ! -f ${LOCKFILE} ]; then
+		debug "Lockfile not found (${LOCKFILE})"
+		return 1
+	fi
+	if ! rm ${LOCKFILE}; then
+		debug "Can't unlink lockfile (${LOCKFILE})"
+		return $?
+	fi
+
 	return 0
 }
 
@@ -276,6 +293,7 @@ set_defaults()
 	LOCKFILE_EXPIRE=${DEFAULT_LOCKFILE_EXPIRE}
 	ONLY_PRINT_VERSION="no"
 	ONLY_PRINT_HELP="no"
+	CLEANUP_BACKUP_DIR="yes"
 
 	return 0
 }
@@ -464,7 +482,8 @@ debug()
 	return 0
 }
 
-# This will raise error end exit with custom error code if given.
+# This will raise error end exit with custom error code if given as $1
+# argument.
 error()
 {
 	check_yesno ${DEBUG} || debug $@
@@ -472,26 +491,39 @@ error()
 
 	[ ! -z "$1" ] && code=1 || code=$?
 
-	exit $code
+	exit ${code}
 }
 
-# Clean up directories created. Used by traps while emergency exit.
+# Clean up before exit: release the lockfile, remove backup directory if
+# CLEANUP_BACKUP_DIR set, clean up extra defaults options if exists. Used by
+# traps while emergency or normal exit. 
 cleanup()
 {
 	debug "Cleaning up"
 
-	# Remove backup directory we have just created.
-	rm -r ${BACKUP_DIR} 2>/dev/null
+	# Remove backup directory if it was NOT completely created.
+	if check_yesno ${CLEANUP_BACKUP_DIR} ; then
+		if [ -d ${BACKUP_DIR} ]; then
+			debug "Removing backup directory"
+			rm -r ${BACKUP_DIR} 2>/dev/null
+		fi
+	fi
 
 	# Release lockfile.
-	release_lockfile
+	[ -f ${LOCKFILE} ] && ( release_lockfile || \
+		debug "Problem removing lockfile" )
 
 	# Remove extra defaults options.
-	[ -f ${MYSQL_EXTRA_FILE} ] && rm -f ${MYSQL_EXTRA_FILE}
+	if [ -n "${MYSQL_EXTRA_FILE}" -a -e ${MYSQL_EXTRA_FILE} ]; then
+		debug "Removing extra options (${MYSQL_EXTRA_FILE})"
+		rm -f ${MYSQL_EXTRA_FILE} || \
+			debug "Problem removing extra options"
+	fi
 
 	# Release `exit' trap to avoid cleanup loop.
 	trap - EXIT
 
+	debug "Exit"
 	exit 0
 }
 
@@ -646,7 +678,6 @@ get_databases()
 
 	if [ ${count} -le 0 ]; then
 		debug "Nothing to do, exiting"
-		cleanup
 		exit $?
 	fi
 
@@ -690,7 +721,7 @@ do_backup()
 		debug "${db}: doing database backup (${db_left} left)"
 
 		# Get tables in database. This is need to check if table engine
-		# allows checking or optimizing
+		# allows checking or optimizing.
 		tables_total=`${MYSQL} \
 				${MYSQL_AUTH_KEYS} \
 				${MYSQL_KEYS} \
@@ -705,11 +736,11 @@ do_backup()
 		fi
 		debug "${db}: ${tables_total_c} table(s) found in total"
 
-		# Check tables
+		# Check tables.
 		if [ ${_check_tables} = "yes" ]; then
 
-			# Not all tables are ready to check or optimize.
-			# We should trim off such tables from all tables list.
+			# Not all tables are ready to check or optimize.  We
+			# should trim off such tables from the all tables list.
 			local tables_checkready=""
 
 			for engine in ${CHECK_READY_ENGINES}; do
@@ -733,13 +764,13 @@ do_backup()
 			tables_checkready_c=`echo ${tables_checkready} |wc -w |tr -d ' '`
 			debug "${db}: check: will try to check ${tables_checkready_c} table(s)"
 
-			# Check tables filtered by engine
+			# Check tables filtered by engine.
 			debug "${db}: check: checking tables"
 			c=0
 			for table in ${tables_checkready}; do
 				if ! ${MYSQLCHECK} \
-					${MYSQLCHECK_OPTIONS} \
 					${MYSQL_AUTH_KEYS} \
+					${MYSQLCHECK_OPTIONS} \
 					${db} ${table}; then
 					debug "${db}: check: ${table} check fail"
 				fi
@@ -814,6 +845,9 @@ do_backup()
 		cp ${PATH_MYCNF} ${BACKUP_DIR}/${mycnf}
 		chmod ${FILE_MODE} ${BACKUP_DIR}/${mycnf}
 	fi
+
+	# Set flag "do not remove backups while doing cleanup()"
+	CLEANUP_BACKUP_DIR="no"
 }
 
 # The main cycle.
@@ -826,10 +860,11 @@ main()
 	remove_old_backups || return $?
 	get_databases || return $?
 	do_backup || return $?
-	release_lockfile || return $?
 	debug "Done"
 	return 0
 }
+
+trap cleanup EXIT
 
 set_defaults
 
@@ -838,7 +873,8 @@ set_defaults
 check_lockfile && touch_lockfile || exit 
 
 # Define authorization credentials if they are set.
-[ ! -z ${MYSQL_USER} ] && MYSQL_AUTH_KEYS="--user=${MYSQL_USER}"
+[ ! -z ${MYSQL_USER} ] && \
+	MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --user=${MYSQL_USER}"
 
 [ ! -z ${MYSQL_HOST} ] && \
 	MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --host=${MYSQL_HOST}"

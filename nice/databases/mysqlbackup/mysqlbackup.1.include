@@ -5,6 +5,10 @@ $Id$
 .BR mysqlcheck (1),
 .BR mysql (1)
 
+[USAGE]
+\fBmysqlbackup\fR package comes with a number of periodic(8) scripts allowing
+to create periodic backups even more transparanlty.
+
 [ENVIRONMENT]
 \fBMYSQL_PREFIX\fR environment variable specifies your MySQL
 installation prefix. All used MySQL binaries (mysqldump, mysql, mysqlcheck)
@@ -14,8 +18,8 @@ will be searched within this prefix at `bin' directory.
 You should keep your password in secure.
 
 The method of specifying your MySQL password with \fB-p\fR option must be
-considered extremely insecure and should not be used. Your password becomes
-visible to system status programs such as
+considered \fIextremely insecure\fR and should not be used. Your password
+becomes visible to system status programs such as
 .B ps
 that may be invoked by other users
 to display command lines. 

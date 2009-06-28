@@ -14,7 +14,7 @@ REMOTE_PATH=~/src
 
 VERSION=${NAME}-`/usr/bin/head -1 VERSION`
 
-FILES=mysqlbackup
+FILES=mysqlbackup 200.mysqlbackup.*
 DIRECTORIES=
 
 EXEC_AFTER=
