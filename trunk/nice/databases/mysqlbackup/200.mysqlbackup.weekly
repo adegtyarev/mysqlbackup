@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+# MySQL server maintenance with mysqlbackup(1) tool.
+#
+# Configurable tunes:
+# 
+# mysqlbackup_enable (bool): 	enables or disables mysqlbackup(1) tool. The
+# 				default is "yes".
+#
+# mysqlbackup_schedule (str):	run mysqlbackup(1) either `daily' or `weekly'
+# 				or `monthly'.  By default mysqlbackup(1) runs
+# 				by a daily schedule.
+#
+# mysqlbackup_args (str):	pass to mysqlbackup(1) program additional
+# 				arguments. By default they are set to "-a
+# 				-l30", which means to backup all the available
+# 				databases and keep backups for a minimum one
+# 				month.  For any other arguments please check
+# 				the manual page for mysqlbackup.
+#
+# $Id$
+
+# If there is a global system configuration file, suck it in.
+#
+if [ -r /etc/defaults/periodic.conf ]
+then
+    . /etc/defaults/periodic.conf
+    source_periodic_confs
+fi
+
+: ${mysqlbackup_enable="yes"}
+: ${mysqlbackup_schedule="daily"}
+: ${mysqlbackup_args="-a -l30"}
+
+mysqlbackup=%%PREFIX%%/bin/mysqlbackup
+
+mysqlbackup() {
+	${mysqlbackup} ${mysqlbackup_args}
+}
+
+case "${mysqlbackup_enable}" in
+	[Yy][Ee][Ss])
+	case "${mysqlbackup_schedule}" in
+		[dD][aA][iI][lL][yY]);;
+		[wW][eE][eE][kK][lL][yY]) mysqlbackup ;;
+		[mM][oO][nN][tT][hH][lL][yY]);;
+	esac;;
+esac
