@@ -12,7 +12,7 @@
 # 				by a daily schedule.
 #
 # mysqlbackup_args (str):	pass to mysqlbackup(1) program additional
-# 				arguments. By default they are set to "-a",
+# 				arguments. By default they are set to "-av",
 # 				which means to backup all the available
 # 				databases.  For any other arguments please
 # 				check the manual page for mysqlbackup.
@@ -29,13 +29,15 @@ fi
 
 : ${mysqlbackup_enable="yes"}
 : ${mysqlbackup_schedule="daily"}
-: ${mysqlbackup_args="-a"}
+: ${mysqlbackup_args="-av"}
 
 mysqlbackup=%%PREFIX%%/bin/mysqlbackup
 
-do_backup() {
-	
+do_backup() 
+{
 	echo "Creating MySQL server backups."
+
+	rc=1
 	${mysqlbackup} ${mysqlbackup_args} || rc=2
 
 	return 0
