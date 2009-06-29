@@ -40,7 +40,7 @@ do_backup()
 	rc=1
 	${mysqlbackup} ${mysqlbackup_args} || rc=2
 	
-	echo "MySQL server backup done"; echo
+	echo "MySQL server backup done";
 
 	return 0
 }
