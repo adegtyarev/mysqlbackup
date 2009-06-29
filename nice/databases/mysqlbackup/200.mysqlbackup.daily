@@ -35,10 +35,12 @@ mysqlbackup=%%PREFIX%%/bin/mysqlbackup
 
 do_backup() 
 {
-	echo "Creating MySQL server backups."
+	echo; echo "Creating MySQL server backups"
 
 	rc=1
 	${mysqlbackup} ${mysqlbackup_args} || rc=2
+	
+	echo "MySQL server backup done"; echo
 
 	return 0
 }
