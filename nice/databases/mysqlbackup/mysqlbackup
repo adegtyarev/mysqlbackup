@@ -116,9 +116,6 @@ Examples:
    ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
    ${me} -a -P ask     You are prompted for password to backup all the databases.
 
-Just add command with parameters to your crontab(1) to create regular MySQL
-backups.
-
 Report bugs to <alexey@renatasystems.org>
 EOF
 

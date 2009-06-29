@@ -3,11 +3,18 @@ $Id$
 [SEE ALSO]
 .BR mysqldump (1),
 .BR mysqlcheck (1),
-.BR mysql (1)
+.BR mysql (1),
+.BR periodic (8)
 
 [USAGE]
-\fBmysqlbackup\fR package comes with a number of periodic(8) scripts allowing
-to create periodic backups even more transparanlty.
+\fBmysqlbackup\fR package comes with a number of
+.BR periodic(8)
+scripts allowing to create periodic backups even more transparanlty.
+
+If you need to create backups with a bit different schedule - just add command
+with desired arguments and flags to your 
+.BR crontab(1)
+to create regular MySQL backups.
 
 [ENVIRONMENT]
 \fBMYSQL_PREFIX\fR environment variable specifies your MySQL
