@@ -54,7 +54,7 @@ tarball: clean
 		${VERSION}/mysqlbackup && \
 	echo "==>  manpage mysqlbackup(1) created"
 	/usr/bin/nroff -mandoc <${VERSION}/mysqlbackup.1 |\
-	/usr/local/bin/man2html -seealso \
+	/usr/local/bin/man2html -seealso -pgsize 1500 \
 	-title "mysqlbackup - create everyday MySQL-databases backup" |\
 	/usr/local/bin/tidy -quiet -asxml -utf8 >${VERSION}/mysqlbackup.html && \
 	echo "==>  html page for mysqlbackup created"
