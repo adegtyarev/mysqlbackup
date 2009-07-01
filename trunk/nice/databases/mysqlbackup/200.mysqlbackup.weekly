@@ -5,7 +5,7 @@
 # Configurable tunes:
 # 
 # mysqlbackup_enable (bool): 	enables or disables mysqlbackup(1) tool. The
-# 				default is "yes".
+# 				default is "no".
 #
 # mysqlbackup_schedule (str):	run mysqlbackup(1) either `daily' or `weekly'
 # 				or `monthly'.  By default mysqlbackup(1) runs
@@ -28,7 +28,7 @@ then
     source_periodic_confs
 fi
 
-: ${mysqlbackup_enable="yes"}
+: ${mysqlbackup_enable="no"}
 : ${mysqlbackup_schedule="daily"}
 : ${mysqlbackup_args="-a -l30"}
 
