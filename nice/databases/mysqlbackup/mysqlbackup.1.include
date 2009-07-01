@@ -10,14 +10,16 @@ $Id$
 [USAGE]
 \fBmysqlbackup\fR package comes with a number of
 .BR periodic(8)
-scripts allowing to create periodic backups even more transparently. With the
-default installation backups configured to run by daily schedule.  There is
+scripts allowing to create periodic backups even more transparently. There is
 number of options suitable for
 .BR periodic.conf(5)
 that can be used to provide a more accurate configuration to run
 \fBmysqlbackup\fR:
 .IP \fImysqlbackup_enable\fR
-(bool) enables or disables \fBmysqlbackup\fR tool. The default is "YES".
+(bool) enables or disables \fBmysqlbackup\fR tool to run with 
+.BR periodic(8).
+The default is "no". If enabled, \fBmysqlbackup\fR will run by a daily
+schedule.
 .IP \fImysqlbackup_schedule\fR
 (str) run \fBmysqlbackup\fR either \fIdaily\fR or \fIweekly\fR or
 \fImonthly\fR. As mentioned above - the default schedule is \fIdaily\fR.
@@ -35,9 +37,10 @@ first day (also, as example) of last months.
 If you need to create backups with a bit different schedule - just add command
 with desired arguments and flags to your 
 .BR crontab(1)
-to create regular MySQL backups. Do not forget to disable
+to create regular MySQL backups. In order to use mysqlbackup as periodic job -
+do not forget to allow
 .BR periodic(8)
-to run \fBmysqlbackup\fR by setting \fImysqlbackup_enable\fR to `NO' in either 
+to run \fBmysqlbackup\fR by setting \fImysqlbackup_enable\fR to `yes' in either 
 \fI/etc/periodic.conf.local\fR or \fI/etc/periodic.conf\fR file. Check
 .BR periodic.conf(5)
 for details.
