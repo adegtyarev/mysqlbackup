@@ -34,15 +34,26 @@ fi
 
 mysqlbackup=%%PREFIX%%/bin/mysqlbackup
 
-mysqlbackup() {
-	${mysqlbackup} ${mysqlbackup_args}
+do_backup() 
+{
+	echo; echo "Creating MySQL server backups"
+
+	rc=1
+	${mysqlbackup} ${mysqlbackup_args} || rc=2
+	
+	echo "MySQL server backup done";
+
+	return 0
 }
 
+rc=0
 case "${mysqlbackup_enable}" in
 	[Yy][Ee][Ss])
 	case "${mysqlbackup_schedule}" in
 		[dD][aA][iI][lL][yY]);;
 		[wW][eE][eE][kK][lL][yY]);;
-		[mM][oO][nN][tT][hH][lL][yY]) mysqlbackup ;;
+		[mM][oO][nN][tT][hH][lL][yY]) do_backup ;;
 	esac;;
 esac
+
+exit ${rc}

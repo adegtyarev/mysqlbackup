@@ -27,7 +27,7 @@ pass to \fBmysqlbackup\fR program additional arguments. By default they are
 set to \fB-av\fR, which means to backup all the available databases. Note that
 this variable automatically adjusted with \fB-l\fR option based upon selected
 \fImysqlbackup_schedule\fR. With \fIweekly\fR schedule backups are stored for
-30 days, i.e. there will be at least four last backups created on every
+30 days; that is, there will be at least four last backups created on every
 Saturday, for example.  As for \fImonthly\fR schedule, backups stays untouched
 for 120 days, allowing to have minimum four last backups created on the every
 first day (also, as example) of last months.
