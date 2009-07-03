@@ -183,7 +183,9 @@ check_lockfile()
 		fi
 	# Check than process id saved in LOCKFILE is a real process.
 	elif check_process ${LOCKFILE}; then
+		_pid=`cat ${LOCKFILE}`
 		echo "Lockfile found. Another process is still running?"
+		echo "Found mysqlbackup program running with pid ${_pid}."
 		return 1
 	# Process running with stored pid is not me.
 	elif ! touch_lockfile; then
@@ -291,6 +293,7 @@ set_defaults()
 	ONLY_PRINT_VERSION="no"
 	ONLY_PRINT_HELP="no"
 	CLEANUP_BACKUP_DIR="yes"
+	CLEANUP_LOCKFILE="no"
 
 	return 0
 }
@@ -506,9 +509,11 @@ cleanup()
 		fi
 	fi
 
-	# Release lockfile.
-	[ -f ${LOCKFILE} ] && ( release_lockfile || \
-		debug "Problem removing lockfile" )
+	# Release lockfile only if it was created by THIS process.
+	if check_yesno ${CLEANUP_LOCKFILE}; then
+		[ -f ${LOCKFILE} ] && ( release_lockfile || \
+			debug "Problem removing lockfile" )
+	fi
 
 	# Remove extra defaults options.
 	if [ -n "${MYSQL_EXTRA_FILE}" -a -e ${MYSQL_EXTRA_FILE} ]; then
@@ -780,14 +785,16 @@ do_backup()
 		# Optimize tables.
 		if [ ${_optimize_tables} = "yes" ]; then
 
-			# Collect OPTIMIZE-ready tables names into tables_optimizeready
-			# array.
+			# Collect OPTIMIZE-ready tables names into
+			# tables_optimizeready array.
 			local tables_optimizeready=""
 
-			# Foreach engines that has known compatibility with OPTIMIZE.
+			# Foreach engines that has known compatibility with
+			# OPTIMIZE.
 			for engine in ${OPTIMIZE_READY_ENGINES}; do
 
-				# Get tables with one of the optimize-ready engine.
+				# Get tables with one of the optimize-ready
+				# engine.
 				_tables=`${MYSQL} \
 					${MYSQL_AUTH_KEYS} \
 					${MYSQL_KEYS} \
@@ -795,12 +802,14 @@ do_backup()
 					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
 					awk '{print $1}'`
 				
-				# Try another engine if no tables with such engine found.
+				# Try another engine if no tables with such
+				# engine found.
 				_tables_c=`echo ${_tables} |wc -w |tr -d ' '`
 				[ ${_tables_c} -eq 0 ] && continue;
 				debug "${db}: optimize: ${_tables_c} ${engine}-engine table(s)"
 
-				# Catenate arrays with previous search results (if was).
+				# Catenate arrays with previous search results
+				# (if was).
 				tables_optimizeready="${tables_optimizeready} ${_tables}"
 			done
 
@@ -868,6 +877,11 @@ set_defaults
 [ $# -ne 0 ] && parse_options $@ && check_options || usage
 
 check_lockfile && touch_lockfile || exit 
+
+# From here we assume that lockfile either was not exist before or was
+# re-created due timeout, so we should remove it while program is cleaning up
+# at exit.
+CLEANUP_LOCKFILE="yes"
 
 # Define authorization credentials if they are set.
 [ ! -z ${MYSQL_USER} ] && \
