@@ -148,7 +148,7 @@ EOF
 #  3 - wrong number of arguments given
 check_yesno() 
 {
-	# Accepts exaclty one argument.
+	# Accepts exactly one argument.
 	[ $# -eq 1 ] || return 3
 
 	case $1 in
@@ -181,7 +181,7 @@ check_lockfile()
 			echo "Lockfile expired (unclean shutdown previous time?)"
 			return 0
 		fi
-	# Check than process id saved in LOCKFILE is a real process.
+	# Check that process id saved in LOCKFILE is a real process.
 	elif check_process ${LOCKFILE}; then
 		_pid=`cat ${LOCKFILE}`
 		echo "Lockfile found. Another process is still running?"
@@ -360,15 +360,15 @@ parse_options()
 	return 0
 }
 
-# This will check then any options set does not conflicts each others and all
-# the necessary options set.
+# This will check that any options set are not conflicts with each others and
+# all the necessary options are set.
 check_options() 
 {
 	# Was -v or -h keys specified?
 	check_yesno ${ONLY_PRINT_VERSION} && version
 	check_yesno ${ONLY_PRINT_HELP} && usage
 
-	# Check if all binaries exists and is enable to execute.
+	# Check if all binaries exists and are enable to execute.
 	binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
 	for binary in ${binaries}; do
 		if [ ! -x "${binary}" ]; then
