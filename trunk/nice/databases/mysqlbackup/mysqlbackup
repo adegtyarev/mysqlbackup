@@ -257,8 +257,9 @@ release_lockfile()
 		return 1
 	fi
 	if ! rm ${LOCKFILE}; then
-		debug "Can't unlink lockfile (${LOCKFILE})"
-		return $?
+		_rc=$?
+		debug "Can't unlink lockfile (${LOCKFILE}): $?"
+		return ${_rc}
 	fi
 
 	return 0
@@ -367,7 +368,7 @@ check_options()
 	check_yesno ${ONLY_PRINT_VERSION} && version
 	check_yesno ${ONLY_PRINT_HELP} && usage
 
-	# Check if all binaries exists and are enable to execute.
+	# Check if all binaries exists and are able to execute.
 	binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
 	for binary in ${binaries}; do
 		if [ ! -x "${binary}" ]; then
@@ -500,6 +501,13 @@ cleanup()
 {
 	debug "Cleaning up"
 
+	# Remove extra defaults options.
+	if [ -n "${MYSQL_EXTRA_FILE}" -a -e ${MYSQL_EXTRA_FILE} ]; then
+		debug "Removing extra options (${MYSQL_EXTRA_FILE})"
+		rm -f ${MYSQL_EXTRA_FILE} || \
+			debug "Problem removing extra options"
+	fi
+
 	# Remove backup directory if it was NOT completely created.
 	if check_yesno ${CLEANUP_BACKUP_DIR} ; then
 		if [ -d ${BACKUP_DIR} ]; then
@@ -512,13 +520,6 @@ cleanup()
 	if check_yesno ${CLEANUP_LOCKFILE}; then
 		[ -f ${LOCKFILE} ] && ( release_lockfile || \
 			debug "Problem removing lockfile" )
-	fi
-
-	# Remove extra defaults options.
-	if [ -n "${MYSQL_EXTRA_FILE}" -a -e ${MYSQL_EXTRA_FILE} ]; then
-		debug "Removing extra options (${MYSQL_EXTRA_FILE})"
-		rm -f ${MYSQL_EXTRA_FILE} || \
-			debug "Problem removing extra options"
 	fi
 
 	# Release `exit' trap to avoid cleanup loop.
@@ -539,7 +540,7 @@ check_mysql_connect()
 	return 0
 }
 
-# This function checks either backup my.cnf configuration file or not.
+# This function checks either do backup my.cnf configuration file or not.
 check_mycnf() 
 {
 	debug "Checking for my.cnf backup"
@@ -596,7 +597,7 @@ create_target_dir()
 	if [ -d "${ARCHIVE_DIR}/${datadir}/${date_suffix}" ]; then
 		i=1
 		while [ $i -le ${max_oneday_backups} ]; do
-			local _d="${ARCHIVE_DIR}/${datadir}/${date_suffix}.$i"
+			_d="${ARCHIVE_DIR}/${datadir}/${date_suffix}.$i"
 
 			# Take the first unused name.
 			if [ ! -d ${_d} ]; then
@@ -650,7 +651,7 @@ remove_old_backups()
 	return 0
 }
 
-# Create databases to backup list.
+# Create databases-to-backup list.
 get_databases() 
 {
 	BACKUP_DATABASES=
