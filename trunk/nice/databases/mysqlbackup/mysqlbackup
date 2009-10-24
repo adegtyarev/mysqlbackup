@@ -114,7 +114,8 @@ Examples:
    ${me}               Do nothing, print help.
    ${me} -av           Verbose backup all the accessible databases on the local MySQL server.
    ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
-   ${me} -a -P ask     You are prompted for password to backup all the databases.
+   ${me} -a -P ask     You are prompted for password to backup all the
+                             databases available under current user.
 
 Report bugs to <alexey@renatasystems.org>
 EOF
