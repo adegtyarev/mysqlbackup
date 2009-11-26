@@ -4,3 +4,9 @@
 2.5:
 - mysqlbackup monitoring probe;
 - support for mysqlhotbackup (replication);
+- support for master/slave: optimize/check master, not slave;
+- optimize/check only on specified days of week;
+- return errors as errors, usage as usage (do not mix opterrors with usage + E_ERRUSAGE)
+- add option to allow backup all databases except some ones (exclude-database).
+
+- myisamchk?
