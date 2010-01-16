@@ -3,6 +3,7 @@
 
 2.5:
 - mysqlbackup monitoring probe;
+- support for p7zip compressor;
 - support for mysqlhotbackup (replication);
 - support for master/slave: optimize/check master, not slave;
 - optimize/check only on specified days of week;
