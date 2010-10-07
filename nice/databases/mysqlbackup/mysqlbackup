@@ -83,10 +83,10 @@ Options:
    -z 7z|bzip2|gzip|no
 		     Compress dumps with specified program. Unless explicitly
 		     set or "no" keyword used, the compressor is selected in
-		     the next order: if 7z(1) archiver found in \$PATH, it will
-		     be used. If it not found, bzip2(1) and gzip(1) programs
-		     will be searched and used if found. If none found, plain
-		     dumps will be created. 
+		     the next order: if 7z(1) compressor found in \$PATH, it
+		     will be used. If it not found, bzip2(1) and gzip(1)
+		     programs will be searched and used if found. If none
+		     found, plain dumps will be created. 
    -F mode           Create files with given mode access permissions.
                      The default mode is ${DEFAULT_FILE_MODE}.
    -D mode           Create directories with given mode access permissions.
@@ -126,6 +126,9 @@ EOF
 	# Do not debug after usage() exit while cleanup().
 	DEBUG="no"
 
+	if [ $# -ne 0 ]; then
+		exit $1
+	fi
 	exit 0
 }
 
@@ -362,7 +365,7 @@ parse_options()
 			v) DEBUG="yes";;
 			V) ONLY_PRINT_VERSION="yes";;
 			H) ONLY_PRINT_HELP="yes";;
-			?) return 1;;
+			?) exit 1;;
 		esac
 	done
 	shift $(($OPTIND-1))
@@ -381,6 +384,24 @@ check_options()
 	check_yesno ${ONLY_PRINT_VERSION} && version
 	check_yesno ${ONLY_PRINT_HELP} && usage
 
+	# Either -a OR explicit database(s) name(s) must be specified, not
+	# both together.
+	if check_yesno "${DUMP_ALL}"; then
+		if [ ! -z "${DUMP_DATABASE}" ]; then
+			_str="Flag '-a' conflicts with explicit database"
+			_str="${_str} name given."
+			echo ${_str}
+			return 1
+		fi
+	else
+		if [ -z "${DUMP_DATABASE}" ]; then 
+			_str="Specify database name to dump or set '-a'"
+			_str="${_str} to dump all the available databases."
+			echo ${_str}
+			return 1
+		fi
+	fi
+
 	# Check if all binaries exists and are able to execute.
 	binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
 	for binary in ${binaries}; do
@@ -388,23 +409,15 @@ check_options()
 			_str="Binary \`${binary}' not found, "
 			_str="${_str} check your MYSQL_PREFIX path"
 			echo ${_str}
-			echo && return 1
+			return 1
 		fi
 	done
-
-	# Either -a OR explicit database(s) name(s) must be specified, not
-	# both together.
-	if check_yesno "${DUMP_ALL}"; then
-		[ -z "${DUMP_DATABASE}" ] || return 1
-	else
-		[ ! -z "${DUMP_DATABASE}" ] || return 1
-	fi
 
 	# Can't specify both password and password file.
 	if [ ! -z "${MYSQL_PASSWORD}" -a \
 		! -z "${MYSQL_PASSWORD_FILE}" ]; then
 		echo "The -p and -P options are mutually exclusive"
-		echo && return 1
+		return 1
 	fi
 
 	# Check for "ask" keyword and prompt password if keyword given.
@@ -437,7 +450,7 @@ check_options()
 			! -r "${MYSQL_PASSWORD_FILE}" ]
 		then
 			echo "Can't read password file: ${MYSQL_PASSWORD_FILE}"
-			echo && return 1
+			return 1
 		fi
 
 		# Check permissions: must not be world readable.
@@ -447,7 +460,7 @@ check_options()
 		# Yeld the last digit and check if `r' bit is set.
 		if [ $((${st_mode##${st_mode%%?}} & 4)) -ne 0 ]; then
 			echo "Password file is readable by others"
-			echo && return 1
+			return 1
 		fi
 
 		# Password file must contain exactly one line (password).
@@ -455,7 +468,7 @@ check_options()
 			tr -d ' '`
 		if [ ${_line_count} -ne 1 ]; then
 			echo "Password file MUST contain exactly one line"
-			echo && return 1
+			return 1
 		fi
 
 		# Seems that the password file is ok, so read it.
@@ -468,7 +481,7 @@ check_options()
 
 		# This will create temporary file only accessable by creator.
 		MYSQL_EXTRA_FILE=`mktemp /var/tmp/mysqlbackup.XXXXXX` || \
-		{ echo "Cannot create temporary file"; echo && return 1; }
+		{ echo "Cannot create temporary file"; return 1; }
 
 		# Write the password.
 		echo -e "[client]\npassword=${MYSQL_PASSWORD}\n" \
@@ -481,7 +494,7 @@ check_options()
 	# Check the lockfile timeout: should be greater than zero.
 	[ "${LOCKFILE_EXPIRE}" -gt 0 ] >/dev/null 2>&1 ||\
 		{ echo "Timeout value must be numeric number of seconds" &&
-		echo && return 1; }
+		return 1; }
 
 	# Seems that all is ok.
 	return 0
@@ -945,7 +958,9 @@ main()
 
 set_defaults
 
-[ $# -ne 0 ] && parse_options $@ || usage
+[ $# -eq 0 ] && usage
+
+parse_options $@ || usage 1
 
 check_options || exit
 
