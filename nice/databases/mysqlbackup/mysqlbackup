@@ -14,7 +14,6 @@ DEFAULT_MYSQLDUMP_OPTIONS="--opt --skip-lock-tables --quote-names"
 DEFAULT_MYSQLCHECK_OPTIONS=\
 "--auto-repair --check-only-changed --extended --silent"
 DEFAULT_MYSQLOPTIMIZE_OPTIONS="--optimize --silent"
-DEFAULT_COMPRESSOR="bzip2"		# bzip2 | gzip | no
 DEFAULT_DIR_MODE=0700
 DEFAULT_FILE_MODE=0600
 DEFAULT_SAVE_MYCNF="yes"		# Either save my.cnf or not
@@ -81,9 +80,13 @@ Options:
    -d directory      Target directory to archive backups.
                      The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
                      need).
-   -z gzip|bzip2|no  Compress dumps with specified program.
-                     The default compressor is ${DEFAULT_COMPRESSOR}(1).  Use
-                     special "no" keyword to disable compressing.
+   -z 7z|bzip2|gzip|no
+		     Compress dumps with specified program. Unless explicitly
+		     set or "no" keyword used, the compressor is selected in
+		     the next order: if 7z(1) archiver found in \$PATH, it will
+		     be used. If it not found, bzip2(1) and gzip(1) programs
+		     will be searched and used if found. If none found, plain
+		     dumps will be created. 
    -F mode           Create files with given mode access permissions.
                      The default mode is ${DEFAULT_FILE_MODE}.
    -D mode           Create directories with given mode access permissions.
@@ -113,7 +116,7 @@ Examples:
 
    ${me}               Do nothing, print help.
    ${me} -av           Verbose backup all the accessible databases on the local MySQL server.
-   ${me} -c no mysql   Backup MySQL system database without output dump being compressed.
+   ${me} -z no mysql   Backup MySQL system database without output dump being compressed.
    ${me} -a -P ask     You are prompted for password to backup all the
                              databases available under current user.
 
@@ -282,7 +285,6 @@ set_defaults()
 	DUMP_ALL="no"
 	DEBUG="no"
 	DUMP_DATABASE=
-	COMPRESSOR=${DEFAULT_COMPRESSOR}
 	FILE_MODE=${DEFAULT_FILE_MODE}
 	DIR_MODE=${DEFAULT_DIR_MODE}
 	SAVE_MYCNF=${DEFAULT_SAVE_MYCNF}
@@ -295,6 +297,16 @@ set_defaults()
 	ONLY_PRINT_HELP="no"
 	CLEANUP_BACKUP_DIR="yes"
 	CLEANUP_LOCKFILE="no"
+
+	COMPRESSOR=
+	local c e
+	for c in 7z bzip2 gzip; do
+		e=`which $c`
+		if [ -x $e ]; then
+			COMPRESSOR=${e##*/}
+			break
+		fi
+	done
 
 	return 0
 }
@@ -332,7 +344,7 @@ parse_options()
 				*) PATH_MYCNF=${OPTARG};;
 			esac;;
 			z) case ${OPTARG} in
-				gzip|bzip2) COMPRESSOR=${OPTARG};;
+				7z|gzip|bzip2) COMPRESSOR=${OPTARG};;
 				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
 				COMPRESSOR=no;;
 				*) echo "Wrong arg for -c option"; return 1;;
@@ -637,14 +649,34 @@ create_target_dir()
 # Remove older backups.
 remove_old_backups() 
 {
-	d=$((${ARCHIVE_DAYS} + 1))
+	debug "Removing old backups"
+
+	local d=$((${ARCHIVE_DAYS} + 1))
+
+	# Different OS'es handle dates differently.
+	local _date_flags
+	local _uname_s=`uname -s`
+	case ${_uname_s} in
+		Linux)
+			 _date_flags="--date=\$d day ago"
+		;;
+		FreeBSD)
+			 _date_flags="-v-\${d}d"
+		;;
+		*)
+			debug "Not yet supported for $_uname_s";
+			return 1
+		;;
+	esac
+
 	while [ ${d} -lt $((${ARCHIVE_DAYS} + 30)) ]; do
-		_purge_date=`date -v-${d}d +%Y%m%d`
+		_date_flags_e=`eval "echo ${_date_flags}"`
+		_purge_date=`date "${_date_flags_e}" +%Y%m%d`
 		find ${BACKUP_DIR}/../ \
-			-type d \
-			-name "${_purge_date}*" \
 			-maxdepth 1 \
 			-mindepth 1 \
+			-name "${_purge_date}*" \
+			-type d \
 			-exec rm -r {} \;
 		d=$((${d} + 1))
 	done
@@ -677,7 +709,7 @@ get_databases()
 
 	count=`echo ${BACKUP_DATABASES} |wc -w |tr -d ' '`
 	[ -z "${count}" ] && count=0
-	debug "Got ${count} databases"
+	debug "Got ${count} database(s)"
 
 	if [ ${count} -le 0 ]; then
 		debug "Nothing to do, exiting"
@@ -698,13 +730,15 @@ do_backup()
 		_suffix="sql.gz";;
 		bzip2) _compressor=`which bzip2 || echo cat`;
 		_suffix="sql.bz2";;
+		7z) _compressor=`which 7z || echo cat`;
+		_suffix="sql.7z";;
 		*) _compressor=`which cat`; _suffix="sql";;
 	esac
 
 	[ -z "${_compressor}" -o ! -x "${_compressor}" ] && \
 		error "Can not find compressor or any pager program"
 
-	[ "${_compressor}" = "cat" ] && _suffix="sql"
+	[ "${_compressor##*/}" = "cat" ] && _suffix="sql"
 	debug "Using \`${_compressor}' program as compressor"
 
 	_check_tables="no"
@@ -832,17 +866,52 @@ do_backup()
 			debug "${db}: optimize: optimized ${c} table(s)"
 		fi
 
+		local _out_file=${BACKUP_DIR}/${db}
 		# Invoke mysqldump(1) for database
 		debug "${db}: dumping"
 		${MYSQLDUMP} \
 			${MYSQL_AUTH_KEYS} \
 			${MYSQLDUMP_OPTIONS} \
-			${db} |\
-		${_compressor} >"${BACKUP_DIR}/${db}.${_suffix}"
+			${db} > ${_out_file} || return $?
 		debug "${db}: dumped"
+		
+		if [ "${_compressor##*/}" != "cat" ]; then
+
+			debug "${db}: compressing"
+			case ${_compressor} in
+				*/bzip2|*/gzip)
+					${_compressor} --stdout ${_out_file} \
+						> ${_out_file}.${_suffix} || \
+						return $?
+				;;
+				*/7z)
+					# If verbose mode is inactive - volume
+					# down 7z compressor. I can't find any
+					# tunes to disable all the output from
+					# this compressor.
+					if ! check_yesno ${DEBUG} ; then
+						${_compressor} -bd a \
+						${_out_file}.${_suffix} \
+						${_out_file} 1>/dev/null || \
+						return $?
+					else
+						${_compressor} -bd a \
+						${_out_file}.${_suffix} \
+						${_out_file} || \
+						return $?
+					fi
+					set +x
+				;;
+			esac
+			debug "${db}: compressed"
+
+			rm ${_out_file}
+
+			_out_file=${_out_file}.${_suffix}
+		fi
 
 		# Set file mode
-		chmod ${FILE_MODE} "${BACKUP_DIR}/${db}.${_suffix}"
+		chmod ${FILE_MODE} ${_out_file}
 	done
 
 	# Backup my.cnf
@@ -852,6 +921,9 @@ do_backup()
 		cp ${PATH_MYCNF} ${BACKUP_DIR}/${mycnf}
 		chmod ${FILE_MODE} ${BACKUP_DIR}/${mycnf}
 	fi
+
+	# Remember the time of successful completion.
+	echo `date -j +%Y%m%d%H%m` > ${BACKUP_DIR}/.done
 
 	# Set flag "do not remove backups while doing cleanup()"
 	CLEANUP_BACKUP_DIR="no"
@@ -864,24 +936,26 @@ main()
 	check_mysql_connect || return $?
 	create_target_dir || return $?
 	check_mycnf || return $?
-	remove_old_backups || return $?
 	get_databases || return $?
 	do_backup || return $?
+	remove_old_backups || return $?
 	debug "Done"
 	return 0
 }
 
-trap cleanup EXIT
-
 set_defaults
 
-[ $# -ne 0 ] && parse_options $@ && check_options || usage
+[ $# -ne 0 ] && parse_options $@ || usage
+
+check_options || exit
+
+trap cleanup EXIT
 
 check_lockfile && touch_lockfile || exit 
 
-# From here we assume that lockfile either was not exist before or was
-# re-created due timeout, so we should remove it while program is cleaning up
-# at exit.
+# From here we assume that the lockfile either didn't exist before or was
+# re-created due timeout, so we should remove it while program will cleanup at
+# exit.
 CLEANUP_LOCKFILE="yes"
 
 # Define authorization credentials if they are set.
@@ -891,6 +965,7 @@ CLEANUP_LOCKFILE="yes"
 [ ! -z ${MYSQL_HOST} ] && \
 	MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --host=${MYSQL_HOST}"
 
-trap cleanup SIGINT SIGTERM EXIT
+# Use shortcuts for signals to deal with Linux's sh.
+trap cleanup INT TERM EXIT
 
 main
