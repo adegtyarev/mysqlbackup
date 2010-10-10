@@ -1,6 +1,7 @@
 $Id$
 
 [SEE ALSO]
+.BR check_mysqlbackup (1),
 .BR mysqldump (1),
 .BR mysqlcheck (1),
 .BR mysql (1),
@@ -44,6 +45,11 @@ to run \fBmysqlbackup\fR by setting \fImysqlbackup_enable\fR to `yes' in either
 \fI/etc/periodic.conf.local\fR or \fI/etc/periodic.conf\fR file. Check
 .BR periodic.conf(5)
 for details.
+.P
+To ensure that you have a fresh backups, you might want to use
+\fBcheck_mysqlbackup\fR program included in this distribution. Check
+.BR check_mysqlbackup(1)
+manual page for details.
 
 [ENVIRONMENT]
 \fBMYSQL_PREFIX\fR environment variable specifies your MySQL
