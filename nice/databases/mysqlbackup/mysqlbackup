@@ -80,11 +80,11 @@ Options:
    -d directory      Target directory to archive backups.
                      The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
                      need).
-   -z 7z|bzip2|gzip|no
+   -z xz|bzip2|gzip|7z|no
 		     Compress dumps with specified program. Unless explicitly
 		     set or "no" keyword used, the compressor is selected in
-		     the next order: if 7z(1) compressor found in \$PATH, it
-		     will be used. If it not found, bzip2(1) and gzip(1)
+		     the next order: if xz(1) compressor found in \$PATH, it
+		     will be used. If it not found, bzip2(1), gzip(1) and 7z(1)
 		     programs will be searched and used if found. If none
 		     found, plain dumps will be created. 
    -F mode           Create files with given mode access permissions.
@@ -303,7 +303,7 @@ set_defaults()
 
 	COMPRESSOR=
 	local c e
-	for c in 7z bzip2 gzip; do
+	for c in xz bzip2 gzip 7z; do
 		e=`which $c`
 		if [ -x $e ]; then
 			COMPRESSOR=${e##*/}
@@ -347,7 +347,7 @@ parse_options()
 				*) PATH_MYCNF=${OPTARG};;
 			esac;;
 			z) case ${OPTARG} in
-				7z|gzip|bzip2) COMPRESSOR=${OPTARG};;
+				xz|7z|gzip|bzip2) COMPRESSOR=${OPTARG};;
 				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
 				COMPRESSOR=no;;
 				*) echo "Wrong arg for -c option"; return 1;;
@@ -739,6 +739,8 @@ do_backup()
 
 	# Select correct compressor program and suffix.
 	case ${COMPRESSOR} in
+		xz) _compressor=`which xz || echo cat`;
+		_suffix="sql.xz";;
 		gzip) _compressor=`which gzip || echo cat`;
 		_suffix="sql.gz";;
 		bzip2) _compressor=`which bzip2 || echo cat`;
@@ -892,7 +894,7 @@ do_backup()
 
 			debug "${db}: compressing"
 			case ${_compressor} in
-				*/bzip2|*/gzip)
+				*/xz|*/bzip2|*/gzip)
 					${_compressor} --stdout ${_out_file} \
 						> ${_out_file}.${_suffix} || \
 						return $?
