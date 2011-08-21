@@ -915,7 +915,6 @@ do_backup()
 						${_out_file} || \
 						return $?
 					fi
-					set +x
 				;;
 			esac
 			debug "${db}: compressed"
@@ -937,11 +936,18 @@ do_backup()
 		chmod ${FILE_MODE} ${BACKUP_DIR}/${mycnf}
 	fi
 
-	# Remember the time of successful completion.
-	echo `date -j +%Y%m%d%H%m` > ${BACKUP_DIR}/.done
-
 	# Set flag "do not remove backups while doing cleanup()"
 	CLEANUP_BACKUP_DIR="no"
+
+	return 0
+}
+
+# Remember the time of successful completion.
+set_done_flag()
+{
+	date +%s > ${BACKUP_DIR}/.done
+
+	return $?
 }
 
 # The main cycle.
@@ -954,7 +960,9 @@ main()
 	get_databases || return $?
 	do_backup || return $?
 	remove_old_backups || return $?
+	set_done_flag || return $?
 	debug "Done"
+
 	return 0
 }
 
