@@ -1,7 +1,6 @@
 $Id$
 
 [SEE ALSO]
-.BR check_mysqlbackup (1),
 .BR mysqldump (1),
 .BR mysqlcheck (1),
 .BR mysql (1),
@@ -46,10 +45,6 @@ to run \fBmysqlbackup\fR by setting \fImysqlbackup_enable\fR to `yes' in either
 .BR periodic.conf(5)
 for details.
 .P
-To ensure that you have a fresh backups, you might want to use
-\fBcheck_mysqlbackup\fR program included in this distribution. Check
-.BR check_mysqlbackup(1)
-manual page for details.
 
 [ENVIRONMENT]
 \fBMYSQL_PREFIX\fR environment variable specifies your MySQL
@@ -78,5 +73,5 @@ yourself. To ensure this, set the file access mode to \fB400\fR or \fB600\fR.
 [AVAILABILITY]
 The latest version of this distribution is available on-line from:
 
-    http://www.renatasystems.org/freebsd/
+    https://mysqlbackup.googlecode.com
 
