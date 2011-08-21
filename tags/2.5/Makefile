@@ -2,7 +2,7 @@
 #
 # Source makefile
 #
-# $Id: Makefile,v 1.4 2008-11-20 09:16:30 alexey Exp $
+# $Id$
 
 CATEGORY=databases
 NAME=mysqlbackup
