@@ -26,7 +26,7 @@ tarball: clean
 	echo "Creating distributive of ${NAME}: ${VERSION}.${TARBALL_SFX}"
 	/bin/mkdir ${VERSION}
 	/usr/bin/sed "s/VERSION/${VERSION}/g;" README > ${VERSION}/README
-	/bin/cp VERSION RELNOTES ${VERSION}
+	/bin/cp VERSION RELNOTES TODO LICENSE ${VERSION}
 	if [ -f Makefile.in ]; then\
 		if [ -f ${VERSION}/Makefile ]; then\
 			echo "conflict: ${VERSION}/Makefile already exist.";\
@@ -54,12 +54,14 @@ tarball: clean
 		--output=${VERSION}/mysqlbackup.1 \
 		${VERSION}/mysqlbackup && \
 	echo "==>  manpage mysqlbackup(1) created"
-	/usr/bin/nroff -mandoc <${VERSION}/mysqlbackup.1 |\
-	/usr/local/bin/man2html -seealso -pgsize 1500 \
-	-title "mysqlbackup - create everyday MySQL-databases backup" |\
-	/usr/local/bin/tidy -quiet -asxml -utf8 >${VERSION}/mysqlbackup.html && \
-	echo "==>  html page for mysqlbackup created"
+#	/usr/bin/nroff -mandoc <${VERSION}/mysqlbackup.1 |\
+#	/usr/local/bin/man2html -seealso -pgsize 1500 \
+#	-title "mysqlbackup - create everyday MySQL-databases backup" |\
+#	/usr/local/bin/tidy -quiet -asxml -utf8 >${VERSION}/mysqlbackup.html && \
+#	echo "==>  html page for mysqlbackup created"
 	/usr/bin/tar zcf ${VERSION}.${TARBALL_SFX} ${VERSION}
+	echo "==>  tarball for ${VERSION} created"
+	tar tzf ${VERSION}.${TARBALL_SFX}
 
 upload: tarball
 	[ -f ${VERSION}.${TARBALL_SFX} ] || exit 1;
