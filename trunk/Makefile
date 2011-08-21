@@ -14,7 +14,7 @@ REMOTE_PATH=~/src
 
 VERSION=${NAME}-`/usr/bin/head -1 VERSION`
 
-FILES=mysqlbackup check_mysqlbackup 200.mysqlbackup.*
+FILES=mysqlbackup 200.mysqlbackup.*
 DIRECTORIES=
 
 EXEC_AFTER=
@@ -44,7 +44,7 @@ tarball: clean
 		exec "${EXEC_AFTER}";\
 	fi
 	/usr/bin/sed -i "" -e "s/%%VERSION%%/`/usr/bin/head -1 VERSION`/g" \
-		${VERSION}/mysqlbackup ${VERSION}/check_mysqlbackup
+		${VERSION}/mysqlbackup 
 	/usr/local/bin/help2man \
 		--version-option "-V" \
 		--help-option "-H" \
@@ -59,24 +59,6 @@ tarball: clean
 	-title "mysqlbackup - create everyday MySQL-databases backup" |\
 	/usr/local/bin/tidy -quiet -asxml -utf8 >${VERSION}/mysqlbackup.html && \
 	echo "==>  html page for mysqlbackup created"
-	
-	/usr/local/bin/help2man \
-		--version-option "-V" \
-		--help-option "-H" \
-		--no-info \
-		--source=FreeBSD \
-		--opt-include=check_mysqlbackup.1.include \
-		--output=${VERSION}/check_mysqlbackup.1 \
-		${VERSION}/check_mysqlbackup && \
-	echo "==>  manpage check_mysqlbackup(1) created"
-
-	/usr/bin/nroff -mandoc <${VERSION}/check_mysqlbackup.1 |\
-	/usr/local/bin/man2html -seealso -pgsize 1500 \
-	-title "check_mysqlbackup - check availability of MySQL-databases backup" |\
-	/usr/local/bin/tidy -quiet -asxml -utf8 >${VERSION}/check_mysqlbackup.html && \
-	echo "==>  html page for check_mysqlbackup created"
-
-	/usr/bin/find ${VERSION} -type d -name CVS | /usr/bin/xargs /bin/rm -rf
 	/usr/bin/tar zcf ${VERSION}.${TARBALL_SFX} ${VERSION}
 
 upload: tarball
