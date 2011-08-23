@@ -2,6 +2,8 @@
   $Id$
 
 2.6:
+- support for make -j flag
+- optimize ls output parsing
 - support for mysqlhotbackup (for replication);
 - support for master/slave: optimize/check master, not slave;
 - optimize/check only on specified days of week;
