@@ -2,6 +2,7 @@
   $Id$
 
 2.6:
+- do not exit on error while dumping a database;
 - support for make -j flag
 - optimize ls output parsing
 - support for mysqlhotbackup (for replication);
