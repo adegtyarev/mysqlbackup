@@ -2,7 +2,7 @@
 #
 # MySQL backup tool.
 #
-# $Id$
+# $Id: mysqlbackup 342 2011-08-21 21:12:23Z degtyarev.alexey $
 
 # MySQL installation prefix.
 : ${MYSQL_PREFIX="/usr/local"}
@@ -640,9 +640,10 @@ create_target_dir()
 			error ${_str} )
 	fi
 
-	local _dirs="${ARCHIVE_DIR} \
-			${ARCHIVE_DIR}/${datadir} \
-			${ARCHIVE_DIR}/${datadir}/${date_suffix}"
+	local _dirs="${ARCHIVE_DIR}"
+	#\
+	#		${ARCHIVE_DIR}/${datadir} \
+	#		${ARCHIVE_DIR}/${datadir}/${date_suffix}"
 	
 	# Create directories with given directory mode permissions.
 	for dir in ${_dirs}; do
@@ -654,7 +655,7 @@ create_target_dir()
 		fi
 	done
 
-	BACKUP_DIR="${ARCHIVE_DIR}/${datadir}/${date_suffix}"
+	BACKUP_DIR="${ARCHIVE_DIR}"
 
 	return 0
 }
@@ -784,6 +785,7 @@ do_backup()
 		tables_total_c=`echo ${tables_total} |wc -w |tr -d ' '`
 		if [ ${tables_total_c} -le 0 ]; then
 			debug "${db}: no tables found, skipping"
+			echo "#Empty" > ${BACKUP_DIR}/${db}.sql
 			continue
 		fi
 		debug "${db}: ${tables_total_c} table(s) found in total"
@@ -881,7 +883,7 @@ do_backup()
 			debug "${db}: optimize: optimized ${c} table(s)"
 		fi
 
-		local _out_file=${BACKUP_DIR}/${db}
+		local _out_file=${BACKUP_DIR}/${db}.sql
 		# Invoke mysqldump(1) for database
 		debug "${db}: dumping"
 		${MYSQLDUMP} \
@@ -960,7 +962,7 @@ main()
 	get_databases || return $?
 	do_backup || return $?
 	remove_old_backups || return $?
-	set_done_flag || return $?
+	#set_done_flag || return $?
 	debug "Done"
 
 	return 0
