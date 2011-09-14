@@ -305,7 +305,7 @@ set_defaults()
 	local c e
 	for c in xz bzip2 gzip 7z; do
 		e=`which $c`
-		if [ -x $e ]; then
+		if [ -x "$e" ]; then
 			COMPRESSOR=${e##*/}
 			break
 		fi
