@@ -4,6 +4,8 @@
 #
 # $Id$
 
+VERSION="2.6-trunk"
+
 # MySQL installation prefix.
 : ${MYSQL_PREFIX="/usr/local"}
 
@@ -136,7 +138,7 @@ EOF
 version() 
 {
 	cat <<EOF
-$(basename $0) 2.5
+$(basename $0) ${VERSION}
 
 Written by Alexey V. Degtyarev
 EOF
@@ -953,7 +955,7 @@ set_done_flag()
 # The main cycle.
 main() 
 {
-	debug "Ready"
+	debug "Ready (version ${VERSION})"
 	check_mysql_connect || return $?
 	create_target_dir || return $?
 	check_mycnf || return $?
