@@ -4,6 +4,7 @@
 2.6:
 - do not exit on error while dumping a database;
 - support for make -j flag (multijobs on a table-level)
+- a key to disable dumping (only check and repair mode)
 - optimize ls output parsing
 - support for mysqlhotbackup (for replication);
 - support for master/slave: optimize/check master, not slave;
