@@ -6,9 +6,6 @@
 
 VERSION="2.6-trunk"
 
-# MySQL installation prefix.
-: ${MYSQL_PREFIX="/usr/local"}
-
 # Some default values.
 DEFAULT_ARCHIVE_DAYS=5			# How long to keep backups.
 DEFAULT_ARCHIVE_DIR="/var/backups"	# According to hier(7).
@@ -43,12 +40,6 @@ ASK_PASSWORD_TIMEOUT=60
 # Configurable options ends here.
 
 OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:vVH"
-
-# Main executables.
-MYSQL="${MYSQL_PREFIX}/bin/mysql"
-MYSQLDUMP="${MYSQL_PREFIX}/bin/mysqldump"
-MYSQLCHECK="${MYSQL_PREFIX}/bin/mysqlcheck"
-MYSQLOPTIMIZE="${MYSQL_PREFIX}/bin/mysqlcheck"
 
 # These keys will be used while invoking mysql(1) program.
 : ${MYSQL_KEYS="--batch --silent"}
@@ -176,8 +167,7 @@ check_lockfile()
 {
 	[ -f "${LOCKFILE}" ] || return 0
 
-	# Get file stats.
-	eval `stat -s ${LOCKFILE}`
+	file_stat ${LOCKFILE}
 
 	# Check that lockfile mtime is older than LOCKFILE_EXPIRE seconds. If
 	# it does - expire it and set the new one. If lockfile is not expired -
@@ -313,6 +303,58 @@ set_defaults()
 		fi
 	done
 
+	# Set MySQL installation prefix.
+	if [ -z "${MYSQL_PREFIX}" ]; then
+		e=`which mysql`
+		if [ -x "$e" ]; then
+			MYSQL_PREFIX=${e%/bin/mysql}
+		fi
+	fi
+
+	# Shortcut.
+	UNAME_s=`uname -s`
+
+	# Configure MySQL stuff.
+	MYSQL="${MYSQL_PREFIX}/bin/mysql"
+	MYSQLDUMP="${MYSQL_PREFIX}/bin/mysqldump"
+	MYSQLCHECK="${MYSQL_PREFIX}/bin/mysqlcheck"
+	MYSQLOPTIMIZE="${MYSQL_PREFIX}/bin/mysqlcheck"
+
+	return 0
+}
+
+# Wrap stat(1) for different OSes.
+file_stat()
+{
+	if [ $# -ne 1 ]; then
+		return 1
+	fi
+
+	[ ! -z "${UNAME_s}" ] || UNAME_s=`uname -s`
+
+	case ${UNAME_s} in
+		Linux)
+			 eval `stat --printf st_mode=%a $1`
+			 eval `stat --printf st_mtime=%Y $1`
+		;;
+		FreeBSD)
+			 eval `stat -s $1`
+		;;
+		*)
+			debug "file_stat(): operating system not supported: ${UNAME_s}";
+			exit 1
+		;;
+	esac
+
+	# Determine shell we are running on: Linux Ubuntu has /bin/sh linked to
+	# dash, other Linuxes link it to bash. Try to avoid chaos.
+	SHELL=/bin/sh
+	if [ -h /bin/sh ]; then
+		local t
+		t=`readlink /bin/sh`
+		SHELL=${t##*/}
+	fi
+
 	return 0
 }
 
@@ -404,7 +446,7 @@ check_options()
 		fi
 	fi
 
-	# Check if all binaries exists and are able to execute.
+	# Check if all binaries exists and are executables.
 	binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
 	for binary in ${binaries}; do
 		if [ ! -x "${binary}" ]; then
@@ -431,9 +473,18 @@ check_options()
 		# password.
 		stty -echo
 
+		# Dash sheel doesn't support -t key for 'read'.
+		local k
+		case ${SHELL} in
+			bash|sh)
+				k=-t ${ASK_PASSWORD_TIMEOUT}
+				;;
+			*) k=
+				;;
+		esac
+
 		# Read the password.
-		read -p "Password: " \
-			-t ${ASK_PASSWORD_TIMEOUT} MYSQL_PASSWORD && \
+		read -p "Password: " $k MYSQL_PASSWORD && \
 			echo || \
 			echo "time out!"
 
@@ -457,7 +508,7 @@ check_options()
 
 		# Check permissions: must not be world readable.
 		# First take the file permissions mode as a shell variable.
-		eval `stat -s ${MYSQL_PASSWORD_FILE}`
+		file_stat ${MYSQL_PASSWORD_FILE}
 
 		# Yeld the last digit and check if `r' bit is set.
 		if [ $((${st_mode##${st_mode%%?}} & 4)) -ne 0 ]; then
@@ -485,9 +536,12 @@ check_options()
 		MYSQL_EXTRA_FILE=`mktemp /var/tmp/mysqlbackup.XXXXXX` || \
 		{ echo "Cannot create temporary file"; return 1; }
 
-		# Write the password.
-		echo -e "[client]\npassword=${MYSQL_PASSWORD}\n" \
-			>>${MYSQL_EXTRA_FILE}
+		# Write the password. Handling carefully with Ubuntu's Linux
+		# /bin/sh (actually, dash) - it doesn't have -e option.
+		cat - >>${MYSQL_EXTRA_FILE} <<EOF
+[client]
+password=${MYSQL_PASSWORD}
+EOF
 
 		MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} \
 			--defaults-extra-file=${MYSQL_EXTRA_FILE}"
@@ -651,7 +705,7 @@ create_target_dir()
 		[ -d ${dir} ] && continue
 		debug "Creating directory: ${dir}"
 		if ! mkdir -m ${DIR_MODE} ${dir}; then
-			error "Cant create directory: ${dir}"
+			error "Can't create directory: ${dir}"
 			return 1
 		fi
 	done
