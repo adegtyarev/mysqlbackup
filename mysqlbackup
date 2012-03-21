@@ -4,7 +4,7 @@
 #
 # $Id$
 
-REVISION="$Revision:"
+REVISION="$Revision$"
 VERSION="2.6-trunk"
 
 # Some default values.
