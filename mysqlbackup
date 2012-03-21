@@ -4,6 +4,7 @@
 #
 # $Id$
 
+REVISION="$Revision:"
 VERSION="2.6-trunk"
 
 # Some default values.
@@ -21,6 +22,7 @@ DEFAULT_CHECK_TABLES="yes"		# yes | no
 DEFAULT_OPTIMIZE_TABLES="yes"		# yes | no
 DEFAULT_LOCKFILE="/var/tmp/mysqlbackup.lock"	# Path to lockfile.
 DEFAULT_LOCKFILE_EXPIRE=90000		# Seconds to expire lockfile.
+DEFAULT_SLAVE_STATUS_FILE="slave-status"	# Filename for slave status.
 
 # CHECK TABLE only works for MyISAM, InnoDB, and (as of MySQL 5.0.16+) ARCHIVE
 # tables.  All the `check-ready' engines should be indicated here separated by
@@ -39,7 +41,7 @@ ASK_PASSWORD_TIMEOUT=60
 
 # Configurable options ends here.
 
-OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:vVH"
+OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:SvVH"
 
 # These keys will be used while invoking mysql(1) program.
 : ${MYSQL_KEYS="--batch --silent"}
@@ -101,17 +103,26 @@ Options:
    -t seconds        Timeout in seconds to expire existing lockfile.
                      By default lockfile expires after ${DEFAULT_LOCKFILE_EXPIRE}
                      seconds.
+   -S                Slave mode. Under this mode mysqlbackup assumes it is
+                     running on MySQL slave. Then, prior to his work,
+                     mysqlbackup stops the slave and saves "SHOW SLAVE STATUS"
+                     output. After work is done, the slave is started up. The
+		     output is saved to "${DEFAULT_SLAVE_STATUS_FILE}" file.
    -v                Be verbose.
    -V                Print version and exit.
    -H                Print this help and exit.
 
 Examples:
 
-   ${me}               Do nothing, print help.
-   ${me} -av           Verbose backup all the accessible databases on the local MySQL server.
-   ${me} -z no mysql   Backup MySQL system database without output dump being compressed.
-   ${me} -a -P ask     You are prompted for password to backup all the
+   mysqlbackup               Do nothing, print help.
+   mysqlbackup -av           Verbose backup all the accessible databases on the
+                             local MySQL server.
+   mysqlbackup -z no mysql   Backup MySQL system database without output dump
+                             being compressed.
+   mysqlbackup -a -P ask     You are prompted for password to backup all the
                              databases available under current user.
+   mysqlbackup -aS           Operate in slave mode. Save SLAVE STATUS for
+                             further replication restore.
 
 Report bugs to <alexey@renatasystems.org>
 EOF
@@ -292,6 +303,10 @@ set_defaults()
 	ONLY_PRINT_HELP="no"
 	CLEANUP_BACKUP_DIR="yes"
 	CLEANUP_LOCKFILE="no"
+	SLAVE_MODE="no"
+	SLAVE_STATUS_FILE=${DEFAULT_SLAVE_STATUS_FILE}
+	SLAVE_STOPPED="no"	# Did we stopped slave?
+	SLAVE_STOP="no"		# Do we need to stop slave?
 
 	COMPRESSOR=
 	local c e
@@ -406,6 +421,7 @@ parse_options()
 			esac;;
 			L) LOCKFILE=${OPTARG};;
 			t) LOCKFILE_EXPIRE=${OPTARG};;
+			S) SLAVE_MODE="yes";;
 			v) DEBUG="yes";;
 			V) ONLY_PRINT_VERSION="yes";;
 			H) ONLY_PRINT_HELP="yes";;
@@ -584,7 +600,7 @@ cleanup()
 	debug "Cleaning up"
 
 	# Remove extra defaults options.
-	if [ -n "${MYSQL_EXTRA_FILE}" -a -e ${MYSQL_EXTRA_FILE} ]; then
+	if [ -n "${MYSQL_EXTRA_FILE}" -a -e "${MYSQL_EXTRA_FILE}" ]; then
 		debug "Removing extra options (${MYSQL_EXTRA_FILE})"
 		rm -f ${MYSQL_EXTRA_FILE} || \
 			debug "Problem removing extra options"
@@ -596,6 +612,16 @@ cleanup()
 			debug "Removing backup directory"
 			rm -r ${BACKUP_DIR} 2>/dev/null
 		fi
+	fi
+
+	# Start slave if it was stopped by us.
+	if check_yesno ${SLAVE_STOPPED}; then
+		${MYSQL} ${MYSQL_AUTH_KEYS} -e "START SLAVE;"
+		if [ $? -ne 0 ]; then
+			error "Can't start slave"
+		fi
+		debug "Slave started"
+		SLAVE_STOPPED="no"
 	fi
 
 	# Release lockfile only if it was created by THIS process.
@@ -614,11 +640,36 @@ cleanup()
 # Check that MySQL server is available with given credentials.
 check_mysql_connect() 
 {
+	local _mysql_out
+
 	debug "Pinging MySQL..."
 	if ! ${MYSQL} ${MYSQL_AUTH_KEYS} -e "QUIT"; then
 		error "MySQL connect error"
 	fi
 	debug "MySQL ok"
+
+	if check_yesno ${SLAVE_MODE}; then
+		debug "Slave mode requested, checking slave"
+
+		_mysql_out=`${MYSQL} ${MYSQL_AUTH_KEYS} \
+			--batch -e "SHOW SLAVE STATUS\G" 2>&1 |\
+			grep "Slave_IO_Running:" |\
+			awk '{print $2}'`
+		if [ $? -ne 0 ]; then
+			error "MySQL error: ${_mysql_out}"
+		fi
+
+		if [ -z "${_mysql_out}" ]; then
+			debug "Slave not configured"
+			SLAVE_MODE="no"
+		elif [ "${_mysql_out}" != "Yes" ]; then
+			debug "Slave IO Running: No"
+		else
+			debug "Slave IO Running: Yes"
+			SLAVE_STOP="yes" 	# Request to stop slave.
+		fi
+	fi
+
 	return 0
 }
 
@@ -749,6 +800,39 @@ remove_old_backups()
 			-exec rm -r {} \;
 		d=$((${d} + 1))
 	done
+
+	return 0
+}
+
+# Stop slave and save it's status if "slave mode" requested.
+handle_slave_mode()
+{
+	if ! check_yesno ${SLAVE_MODE}; then
+		return 0
+	fi
+
+	if [ ! -e "${BACKUP_DIR}" ]; then
+		debug "Backup dir does not exist?"
+		return 1
+	fi
+
+	if ! check_yesno ${SLAVE_STOP}; then
+		debug "Don't need to stop slave"
+	else
+		${MYSQL} ${MYSQL_AUTH_KEYS} -e "STOP SLAVE;"
+		if [ $? -ne 0 ]; then
+			error "Can't stop slave"
+		fi
+		debug "Slave stopped"
+		SLAVE_STOPPED="yes"
+	fi
+
+	${MYSQL} ${MYSQL_AUTH_KEYS} --batch -e "SHOW SLAVE STATUS\G" \
+		> ${BACKUP_DIR}/${SLAVE_STATUS_FILE}
+	if [ $? -ne 0 ]; then
+		debug "Can't get slave status"
+	fi
+	debug "Slave status saved: ${BACKUP_DIR}/${SLAVE_STATUS_FILE}"
 
 	return 0
 }
@@ -1009,9 +1093,10 @@ set_done_flag()
 # The main cycle.
 main() 
 {
-	debug "Ready (version ${VERSION})"
+	debug "Ready (version ${VERSION}, ${REVISION})"
 	check_mysql_connect || return $?
 	create_target_dir || return $?
+	handle_slave_mode || return $?
 	check_mycnf || return $?
 	get_databases || return $?
 	do_backup || return $?

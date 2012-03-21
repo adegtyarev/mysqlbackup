@@ -1,7 +1,7 @@
 
   $Id$
 
-2.6:
+2.x:
 - do not exit on error while dumping a database;
 - support for make -j flag (multijobs on a table-level)
 - a key to disable dumping (only check and repair mode)
@@ -12,10 +12,11 @@
 - return errors as errors, usage as usage (do not mix opterrors with usage + E_ERRUSAGE)
 - add option to allow backup all databases except some ones (exclude-database).
 - add configuration file;
-- add SHOW MASTER STATUS + LOCK TABLES statements logging before doing dump (allow quick replica restores from backup);
+- LOCK TABLES before doing database dump
 - use myisamchk?
 
 Done:
-+ mysqlbackup monitoring probe;
++ add SHOW SLAVE STATUS  / 2.6
++ mysqlbackup monitoring probe / 2.5
 + support for p7zip compressor;
 + DO NOT delete old backups unless last one were SUCCEED.
