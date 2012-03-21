@@ -642,12 +642,14 @@ check_mysql_connect()
 {
 	local _mysql_out
 
+	# Check if we can reach MySQL server.
 	debug "Pinging MySQL..."
 	if ! ${MYSQL} ${MYSQL_AUTH_KEYS} -e "QUIT"; then
 		error "MySQL connect error"
 	fi
 	debug "MySQL ok"
 
+	# Are we run on slave?
 	if check_yesno ${SLAVE_MODE}; then
 		debug "Slave mode requested, checking slave"
 
@@ -659,14 +661,16 @@ check_mysql_connect()
 			error "MySQL error: ${_mysql_out}"
 		fi
 
+		# Empty output means no slave was configured.
 		if [ -z "${_mysql_out}" ]; then
 			debug "Slave not configured"
 			SLAVE_MODE="no"
 		elif [ "${_mysql_out}" != "Yes" ]; then
 			debug "Slave IO Running: No"
 		else
+			# Slave IO running, request to stop slave.
+			SLAVE_STOP="yes"
 			debug "Slave IO Running: Yes"
-			SLAVE_STOP="yes" 	# Request to stop slave.
 		fi
 	fi
 
@@ -1093,7 +1097,7 @@ set_done_flag()
 # The main cycle.
 main() 
 {
-	debug "Ready (version ${VERSION}, ${REVISION})"
+	debug "Ready (version ${VERSION}, rev${REVISION% $})"
 	check_mysql_connect || return $?
 	create_target_dir || return $?
 	handle_slave_mode || return $?
