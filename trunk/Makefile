@@ -21,7 +21,7 @@ EXEC_AFTER=
 
 .SILENT:
 
-all: clean tarball upload
+all: clean tarball
 tarball: clean
 	echo "Creating distributive of ${NAME}: ${VERSION}.${TARBALL_SFX}"
 	/bin/mkdir ${VERSION}
