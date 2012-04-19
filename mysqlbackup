@@ -41,7 +41,7 @@ ASK_PASSWORD_TIMEOUT=60
 
 # Configurable options ends here.
 
-OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:SvVH"
+OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:SvVHI"
 
 # These keys will be used while invoking mysql(1) program.
 : ${MYSQL_KEYS="--batch --silent"}
@@ -76,12 +76,12 @@ Options:
                      The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
                      need).
    -z xz|bzip2|gzip|7z|no
-		     Compress dumps with specified program. Unless explicitly
-		     set or "no" keyword used, the compressor is selected in
-		     the next order: if xz(1) compressor found in \$PATH, it
-		     will be used. If it not found, bzip2(1), gzip(1) and 7z(1)
-		     programs will be searched and used if found. If none
-		     found, plain dumps will be created. 
+                     Compress dumps with specified program. Unless explicitly
+                     set or "no" keyword used, the compressor is selected in
+                     the next order: if xz(1) compressor found in \$PATH, it
+                     will be used. If it not found, bzip2(1), gzip(1) and 7z(1)
+                     programs will be searched and used if found. If none
+                     found, plain dumps will be created. 
    -F mode           Create files with given mode access permissions.
                      The default mode is ${DEFAULT_FILE_MODE}.
    -D mode           Create directories with given mode access permissions.
@@ -107,7 +107,10 @@ Options:
                      running on MySQL slave. Then, prior to his work,
                      mysqlbackup stops the slave and saves "SHOW SLAVE STATUS"
                      output. After work is done, the slave is started up. The
-		     output is saved to "${DEFAULT_SLAVE_STATUS_FILE}" file.
+                     output is saved to "${DEFAULT_SLAVE_STATUS_FILE}" file.
+   -I                Ignore errors while dumping database. mysqlbackup will not
+                     stop if error occurred while mysqldump(1) on any database
+                     will return an error.
    -v                Be verbose.
    -V                Print version and exit.
    -H                Print this help and exit.
@@ -307,6 +310,7 @@ set_defaults()
 	SLAVE_STATUS_FILE=${DEFAULT_SLAVE_STATUS_FILE}
 	SLAVE_STOPPED="no"	# Did we stopped slave?
 	SLAVE_STOP="no"		# Do we need to stop slave?
+    IGNORE_ERRORS="no"  # Don't ignore errors, but rather exit on error.
 
 	COMPRESSOR=
 	local c e
@@ -425,9 +429,11 @@ parse_options()
 			v) DEBUG="yes";;
 			V) ONLY_PRINT_VERSION="yes";;
 			H) ONLY_PRINT_HELP="yes";;
+            I) IGNORE_ERRORS="yes";;
 			?) exit 1;;
 		esac
 	done
+
 	shift $(($OPTIND-1))
 
 	# Take the database name(s) if given in command line.
@@ -969,6 +975,7 @@ do_backup()
 					${MYSQLCHECK_OPTIONS} \
 					${db} ${table}; then
 					debug "${db}: check: ${table} check fail"
+                    continue
 				fi
 				c=$((c+1))
 				#debug "${db}: check: ${table} check ok"
@@ -1018,6 +1025,7 @@ do_backup()
 					${MYSQLOPTIMIZE_OPTIONS} \
 					${db} ${table}; then
 					debug "${db}: optimize: table ${table} optimizing failed"
+                    continue
 				fi
 				c=$((c+1))
 				#debug "${db}: ${table} optimize ok"
@@ -1031,8 +1039,19 @@ do_backup()
 		${MYSQLDUMP} \
 			${MYSQL_AUTH_KEYS} \
 			${MYSQLDUMP_OPTIONS} \
-			${db} > ${_out_file} || return $?
-		debug "${db}: dumped"
+			${db} > ${_out_file}
+        _rc=$?
+
+        if [ ${_rc} -ne 0 ]; then
+            # Are we forced to ignore any errors?
+            if ! check_yesno ${IGNORE_ERRORS} ; then
+                debug "${db}: error occurred (rc=${_rc})"
+                return $?
+            fi
+            debug "${db}: error occurred (rc=${_rc}), ignored"
+        else
+		    debug "${db}: dumped"
+        fi
 		
 		if [ "${_compressor##*/}" != "cat" ]; then
 
