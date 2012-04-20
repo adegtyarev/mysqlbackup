@@ -1,4 +1,5 @@
 #!/bin/sh
+# vim: tabstop=4 shiftwidth=4 expandtab
 #
 # MySQL backup tool.
 #
@@ -8,21 +9,21 @@ REVISION="$Revision$"
 VERSION="2.6-trunk"
 
 # Some default values.
-DEFAULT_ARCHIVE_DAYS=5			# How long to keep backups.
-DEFAULT_ARCHIVE_DIR="/var/backups"	# According to hier(7).
+DEFAULT_ARCHIVE_DAYS=5                # How long to keep backups.
+DEFAULT_ARCHIVE_DIR="/var/backups"    # According to hier(7).
 DEFAULT_MYSQLDUMP_OPTIONS="--opt --skip-lock-tables --quote-names"
 DEFAULT_MYSQLCHECK_OPTIONS=\
 "--auto-repair --check-only-changed --extended --silent"
 DEFAULT_MYSQLOPTIMIZE_OPTIONS="--optimize --silent"
 DEFAULT_DIR_MODE=0700
 DEFAULT_FILE_MODE=0600
-DEFAULT_SAVE_MYCNF="yes"		# Either save my.cnf or not
-DEFAULT_PATH_MYCNF="%%DATADIR%%my.cnf"	# Macros will be replaced
-DEFAULT_CHECK_TABLES="yes"		# yes | no
-DEFAULT_OPTIMIZE_TABLES="yes"		# yes | no
-DEFAULT_LOCKFILE="/var/tmp/mysqlbackup.lock"	# Path to lockfile.
-DEFAULT_LOCKFILE_EXPIRE=90000		# Seconds to expire lockfile.
-DEFAULT_SLAVE_STATUS_FILE="slave-status"	# Filename for slave status.
+DEFAULT_SAVE_MYCNF="yes"              # Either save my.cnf or not
+DEFAULT_PATH_MYCNF="%%DATADIR%%my.cnf"    # Macros will be replaced
+DEFAULT_CHECK_TABLES="yes"            # yes | no
+DEFAULT_OPTIMIZE_TABLES="yes"         # yes | no
+DEFAULT_LOCKFILE="/var/tmp/mysqlbackup.lock"    # Path to lockfile.
+DEFAULT_LOCKFILE_EXPIRE=90000         # Seconds to expire lockfile.
+DEFAULT_SLAVE_STATUS_FILE="slave-status"    # Filename for slave status.
 
 # CHECK TABLE only works for MyISAM, InnoDB, and (as of MySQL 5.0.16+) ARCHIVE
 # tables.  All the `check-ready' engines should be indicated here separated by
@@ -49,8 +50,8 @@ OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:SvVHI"
 # Outputs program usage instructions.
 usage() 
 {
-	me=`basename $0`
-	cat << EOF
+    me=`basename $0`
+    cat << EOF
 ${me} creates everyday MySQL databases backup
 
 Usage: ${me} [OPTIONS] [database [database [ ... ] ]]
@@ -60,12 +61,12 @@ Options:
    -u user           The MySQL user name to use when connecting to the server.
    -h host           Connect to host.
    -p password       Password to use when connecting to server. You should note
-		     that specifying a password on the command line should be
-		     considered insecure.
+                     that specifying a password on the command line should be
+                     considered insecure.
    -P filename|ask   Read the clear password from the file. The file must
-		     normally not be readable by "others" and must contain
-		     exactly one line. Password will be prompted from the
-		     command line if the special keyword "ask" specified here.
+                     normally not be readable by "others" and must contain
+                     exactly one line. Password will be prompted from the
+                     command line if the special keyword "ask" specified here.
    -o option|no      Additional mysqldump option. To specify multiple options
                      you should repeat this key for each mysqldump-option.  The
                      default options are: ${DEFAULT_MYSQLDUMP_OPTIONS}.  To not
@@ -109,8 +110,8 @@ Options:
                      output. After work is done, the slave is started up. The
                      output is saved to "${DEFAULT_SLAVE_STATUS_FILE}" file.
    -I                Ignore errors while dumping database. mysqlbackup will not
-                     stop if error occurred while mysqldump(1) on any database
-                     will return an error.
+                     stop if mysqldump(1) running on any database will return
+                     an error.
    -v                Be verbose.
    -V                Print version and exit.
    -H                Print this help and exit.
@@ -130,28 +131,28 @@ Examples:
 Report bugs to <alexey@renatasystems.org>
 EOF
 
-	# Do not debug after usage() exit while cleanup().
-	DEBUG="no"
+    # Do not debug after usage() exit while cleanup().
+    DEBUG="no"
 
-	if [ $# -ne 0 ]; then
-		exit $1
-	fi
-	exit 0
+    if [ $# -ne 0 ]; then
+        exit $1
+    fi
+    exit 0
 }
 
 # Outputs program version and exit.
 version() 
 {
-	cat <<EOF
+    cat <<EOF
 $(basename $0) ${VERSION}
 
 Written by Alexey V. Degtyarev
 EOF
 
-	# Do not debug cleanup() trap.
-	DEBUG="no"
+    # Do not debug cleanup() trap.
+    DEBUG="no"
 
-	exit 0
+    exit 0
 }
 
 # Helper function to determine given argument either `yes' or `no'.
@@ -162,440 +163,440 @@ EOF
 #  3 - wrong number of arguments given
 check_yesno() 
 {
-	# Accepts exactly one argument.
-	[ $# -eq 1 ] || return 3
+    # Accepts exactly one argument.
+    [ $# -eq 1 ] || return 3
 
-	case $1 in
-		[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1) return 0;;
-		[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) return 1;;
-		*) return 2;
-	esac
+    case $1 in
+        [Yy][Ee][Ss]|[Tt][Rr][Uu][Ee]|[Oo][Nn]|1) return 0;;
+        [Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0) return 1;;
+        *) return 2;
+    esac
 
-	# Should not be here ever.
-	return 0
+    # Should not be here ever.
+    return 0
 }
 
 # Check for locking: if lockfile found and it has not expired yet - give up
 # with error. Expire lockfile in other case.
 check_lockfile()
 {
-	[ -f "${LOCKFILE}" ] || return 0
+    [ -f "${LOCKFILE}" ] || return 0
 
-	file_stat ${LOCKFILE}
+    file_stat ${LOCKFILE}
 
-	# Check that lockfile mtime is older than LOCKFILE_EXPIRE seconds. If
-	# it does - expire it and set the new one. If lockfile is not expired -
-	# this could mean that another process still running, so we give up.
-	if [ ${st_mtime} -lt $((`date +%s`-${LOCKFILE_EXPIRE})) ]; then
-		if ! touch_lockfile; then
-			echo "Can not expire lockfile (${LOCKFILE})."
-			return 2
-		else
-			echo "Lockfile expired (unclean shutdown previous time?)"
-			return 0
-		fi
-	# Check that process id saved in LOCKFILE is a real process.
-	elif check_process ${LOCKFILE}; then
-		_pid=`cat ${LOCKFILE}`
-		echo "Lockfile found. Another process is still running?"
-		echo "Found mysqlbackup program running with pid ${_pid}."
-		return 1
-	# Process running with stored pid is not me.
-	elif ! touch_lockfile; then
-		echo "Can not release lockfile ($?)"
-		return 1
-	# Releasing lockfile.
-	else
-		echo "Lockfile released (unclead shutdown previous time?)"
-		return 0
-	fi
+    # Check that lockfile mtime is older than LOCKFILE_EXPIRE seconds. If
+    # it does - expire it and set the new one. If lockfile is not expired -
+    # this could mean that another process still running, so we give up.
+    if [ ${st_mtime} -lt $((`date +%s`-${LOCKFILE_EXPIRE})) ]; then
+        if ! touch_lockfile; then
+            echo "Can not expire lockfile (${LOCKFILE})."
+            return 2
+        else
+            echo "Lockfile expired (unclean shutdown previous time?)"
+            return 0
+        fi
+    # Check that process id saved in LOCKFILE is a real process.
+    elif check_process ${LOCKFILE}; then
+        _pid=`cat ${LOCKFILE}`
+        echo "Lockfile found. Another process is still running?"
+        echo "Found mysqlbackup program running with pid ${_pid}."
+        return 1
+    # Process running with stored pid is not me.
+    elif ! touch_lockfile; then
+        echo "Can not release lockfile ($?)"
+        return 1
+    # Releasing lockfile.
+    else
+        echo "Lockfile released (unclead shutdown previous time?)"
+        return 0
+    fi
 
-	return 0
+    return 0
 }
 
 check_process()
 {
-	[ $# -eq 1 ] || return 1
-	[ ! -z $1 ] || return 1
-	[ -f $1 -a -r $1 ] || return 1
+    [ $# -eq 1 ] || return 1
+    [ ! -z $1 ] || return 1
+    [ -f $1 -a -r $1 ] || return 1
 
-	# Take the process name and arguments from process tree.
-	# Linux users need to use some other command.
-	_procname="`pgrep -j none -F $1 -l -f`"
-	if [ $? -ne 0 ]; then
-		return 3
-	fi
+    # Take the process name and arguments from process tree.
+    # Linux users need to use some other command.
+    _procname="`pgrep -j none -F $1 -l -f`"
+    if [ $? -ne 0 ]; then
+        return 3
+    fi
 
-	# 14659 /bin/sh /usr/local/bin/mysqlbackup -a
-	set -- ${_procname}
+    # 14659 /bin/sh /usr/local/bin/mysqlbackup -a
+    set -- ${_procname}
 
-	# Take the basename of interpreter running puppetd instance we got from
-	# process list.
-	_running_interpreter=${2##*/}
+    # Take the basename of interpreter running puppetd instance we got from
+    # process list.
+    _running_interpreter=${2##*/}
 
-	# And take the interpreter from the executable script.
-	read _interpreter < $3
-	case "${_interpreter}" in
-		# strip #!
-		\#!*) _interpreter=${_interpreter#\#!}
-		set -- ${_interpreter}
-		_interpreter=${_interpreter##*/}
-		;;
-		*) _interpreter="/nonexistent"
-		;;
-	esac
+    # And take the interpreter from the executable script.
+    read _interpreter < $3
+    case "${_interpreter}" in
+        # strip #!
+        \#!*) _interpreter=${_interpreter#\#!}
+        set -- ${_interpreter}
+        _interpreter=${_interpreter##*/}
+        ;;
+        *) _interpreter="/nonexistent"
+        ;;
+    esac
 
-	# Compare two interpretators from ps list and from executable script.
-	if [ ${_running_interpreter} != ${_interpreter} ]; then
-		return 4
-	fi
+    # Compare two interpretators from ps list and from executable script.
+    if [ ${_running_interpreter} != ${_interpreter} ]; then
+        return 4
+    fi
 
-	return 0
+    return 0
 }
 
 # Write down to lockfile current process id.
 touch_lockfile()
 {
-	echo $$ >${LOCKFILE} || return $?
-	return 0
+    echo $$ >${LOCKFILE} || return $?
+    return 0
 }
 
 # Release lockfile while normal program exit.
 release_lockfile()
 {
-	debug "Releasing lockfile"
-	
-	if [ ! -f ${LOCKFILE} ]; then
-		debug "Lockfile not found (${LOCKFILE})"
-		return 1
-	fi
-	if ! rm ${LOCKFILE}; then
-		_rc=$?
-		debug "Can't unlink lockfile (${LOCKFILE}): $?"
-		return ${_rc}
-	fi
+    debug "Releasing lockfile"
+    
+    if [ ! -f ${LOCKFILE} ]; then
+        debug "Lockfile not found (${LOCKFILE})"
+        return 1
+    fi
+    if ! rm ${LOCKFILE}; then
+        _rc=$?
+        debug "Can't unlink lockfile (${LOCKFILE}): ${_rc}"
+        return ${_rc}
+    fi
 
-	return 0
+    return 0
 }
 
 # Set all the variables to their default values.
 set_defaults() 
 {
-	MYSQL_USER=
-	MYSQL_HOST=
-	MYSQL_PASSWORD=
-	MYSQL_PASSWORD_FILE=
-	MYSQLDUMP_OPTIONS=${DEFAULT_MYSQLDUMP_OPTIONS}
-	MYSQLCHECK_OPTIONS=${DEFAULT_MYSQLCHECK_OPTIONS}
-	MYSQLOPTIMIZE_OPTIONS=${DEFAULT_MYSQLOPTIMIZE_OPTIONS}
-	MYSQL_AUTH_KEYS=
-	ARCHIVE_DAYS=${DEFAULT_ARCHIVE_DAYS}
-	ARCHIVE_DIR=${DEFAULT_ARCHIVE_DIR}
-	DUMP_ALL="no"
-	DEBUG="no"
-	DUMP_DATABASE=
-	FILE_MODE=${DEFAULT_FILE_MODE}
-	DIR_MODE=${DEFAULT_DIR_MODE}
-	SAVE_MYCNF=${DEFAULT_SAVE_MYCNF}
-	PATH_MYCNF=${DEFAULT_PATH_MYCNF}
-	CHECK_TABLES=${DEFAULT_CHECK_TABLES}
-	OPTIMIZE_TABLES=${DEFAULT_OPTIMIZE_TABLES}
-	LOCKFILE=${DEFAULT_LOCKFILE}
-	LOCKFILE_EXPIRE=${DEFAULT_LOCKFILE_EXPIRE}
-	ONLY_PRINT_VERSION="no"
-	ONLY_PRINT_HELP="no"
-	CLEANUP_BACKUP_DIR="yes"
-	CLEANUP_LOCKFILE="no"
-	SLAVE_MODE="no"
-	SLAVE_STATUS_FILE=${DEFAULT_SLAVE_STATUS_FILE}
-	SLAVE_STOPPED="no"	# Did we stopped slave?
-	SLAVE_STOP="no"		# Do we need to stop slave?
+    MYSQL_USER=
+    MYSQL_HOST=
+    MYSQL_PASSWORD=
+    MYSQL_PASSWORD_FILE=
+    MYSQLDUMP_OPTIONS=${DEFAULT_MYSQLDUMP_OPTIONS}
+    MYSQLCHECK_OPTIONS=${DEFAULT_MYSQLCHECK_OPTIONS}
+    MYSQLOPTIMIZE_OPTIONS=${DEFAULT_MYSQLOPTIMIZE_OPTIONS}
+    MYSQL_AUTH_KEYS=
+    ARCHIVE_DAYS=${DEFAULT_ARCHIVE_DAYS}
+    ARCHIVE_DIR=${DEFAULT_ARCHIVE_DIR}
+    DUMP_ALL="no"
+    DEBUG="no"
+    DUMP_DATABASE=
+    FILE_MODE=${DEFAULT_FILE_MODE}
+    DIR_MODE=${DEFAULT_DIR_MODE}
+    SAVE_MYCNF=${DEFAULT_SAVE_MYCNF}
+    PATH_MYCNF=${DEFAULT_PATH_MYCNF}
+    CHECK_TABLES=${DEFAULT_CHECK_TABLES}
+    OPTIMIZE_TABLES=${DEFAULT_OPTIMIZE_TABLES}
+    LOCKFILE=${DEFAULT_LOCKFILE}
+    LOCKFILE_EXPIRE=${DEFAULT_LOCKFILE_EXPIRE}
+    ONLY_PRINT_VERSION="no"
+    ONLY_PRINT_HELP="no"
+    CLEANUP_BACKUP_DIR="yes"
+    CLEANUP_LOCKFILE="no"
+    SLAVE_MODE="no"
+    SLAVE_STATUS_FILE=${DEFAULT_SLAVE_STATUS_FILE}
+    SLAVE_STOPPED="no"    # Did we stopped slave?
+    SLAVE_STOP="no"        # Do we need to stop slave?
     IGNORE_ERRORS="no"  # Don't ignore errors, but rather exit on error.
 
-	COMPRESSOR=
-	local c e
-	for c in xz bzip2 gzip 7z; do
-		e=`which $c`
-		if [ -x "$e" ]; then
-			COMPRESSOR=${e##*/}
-			break
-		fi
-	done
+    COMPRESSOR=
+    local c e
+    for c in xz bzip2 gzip 7z; do
+        e=`which $c`
+        if [ -x "$e" ]; then
+            COMPRESSOR=${e##*/}
+            break
+        fi
+    done
 
-	# Set MySQL installation prefix.
-	if [ -z "${MYSQL_PREFIX}" ]; then
-		e=`which mysql`
-		if [ -x "$e" ]; then
-			MYSQL_PREFIX=${e%/bin/mysql}
-		fi
-	fi
+    # Set MySQL installation prefix.
+    if [ -z "${MYSQL_PREFIX}" ]; then
+        e=`which mysql`
+        if [ -x "$e" ]; then
+            MYSQL_PREFIX=${e%/bin/mysql}
+        fi
+    fi
 
-	# Shortcut.
-	UNAME_s=`uname -s`
+    # Shortcut.
+    UNAME_s=`uname -s`
 
-	# Configure MySQL stuff.
-	MYSQL="${MYSQL_PREFIX}/bin/mysql"
-	MYSQLDUMP="${MYSQL_PREFIX}/bin/mysqldump"
-	MYSQLCHECK="${MYSQL_PREFIX}/bin/mysqlcheck"
-	MYSQLOPTIMIZE="${MYSQL_PREFIX}/bin/mysqlcheck"
+    # Configure MySQL stuff.
+    MYSQL="${MYSQL_PREFIX}/bin/mysql"
+    MYSQLDUMP="${MYSQL_PREFIX}/bin/mysqldump"
+    MYSQLCHECK="${MYSQL_PREFIX}/bin/mysqlcheck"
+    MYSQLOPTIMIZE="${MYSQL_PREFIX}/bin/mysqlcheck"
 
-	return 0
+    return 0
 }
 
 # Wrap stat(1) for different OSes.
 file_stat()
 {
-	if [ $# -ne 1 ]; then
-		return 1
-	fi
+    if [ $# -ne 1 ]; then
+        return 1
+    fi
 
-	[ ! -z "${UNAME_s}" ] || UNAME_s=`uname -s`
+    [ ! -z "${UNAME_s}" ] || UNAME_s=`uname -s`
 
-	case ${UNAME_s} in
-		Linux)
-			 eval `stat --printf st_mode=%a $1`
-			 eval `stat --printf st_mtime=%Y $1`
-		;;
-		FreeBSD)
-			 eval `stat -s $1`
-		;;
-		*)
-			debug "file_stat(): operating system not supported: ${UNAME_s}";
-			exit 1
-		;;
-	esac
+    case ${UNAME_s} in
+        Linux)
+             eval `stat --printf st_mode=%a $1`
+             eval `stat --printf st_mtime=%Y $1`
+        ;;
+        FreeBSD)
+             eval `stat -s $1`
+        ;;
+        *)
+            debug "file_stat(): operating system not supported: ${UNAME_s}";
+            exit 1
+        ;;
+    esac
 
-	# Determine shell we are running on: Linux Ubuntu has /bin/sh linked to
-	# dash, other Linuxes link it to bash. Try to avoid chaos.
-	SHELL=/bin/sh
-	if [ -h /bin/sh ]; then
-		local t
-		t=`readlink /bin/sh`
-		SHELL=${t##*/}
-	fi
+    # Determine shell we are running on: Linux Ubuntu has /bin/sh linked to
+    # dash, other Linuxes link it to bash. Try to avoid chaos.
+    SHELL=/bin/sh
+    if [ -h /bin/sh ]; then
+        local t
+        t=`readlink /bin/sh`
+        SHELL=${t##*/}
+    fi
 
-	return 0
+    return 0
 }
 
 # Parse given options using builtin getopts function.
 parse_options() 
 {
-	while getopts ${OPTIONS} option $@; do
-		case ${option} in
-			u) MYSQL_USER=${OPTARG};;
-			h) MYSQL_HOST=${OPTARG};;
-			p) MYSQL_PASSWORD=${OPTARG};;
-			P) MYSQL_PASSWORD_FILE=${OPTARG};;
-			l) ARCHIVE_DAYS=${OPTARG};;
-			d) ARCHIVE_DIR=${OPTARG};;
-			a) DUMP_ALL="yes";;
-			F) FILE_MODE=${OPTARG};;
-			D) DIR_MODE=${OPTARG};;
-			C) check_yesno "${OPTARG}";
-			case $? in
-				0) CHECK_TABLES="yes";;
-				1) CHECK_TABLES="no";;
-				*) MYSQLCHECK_OPTIONS=${OPTARG};;
-			esac;;
-			O) check_yesno "${OPTARG}";
-			case $? in
-				0) OPTIMIZE_TABLES="yes";;
-				1) OPTIMIZE_TABLES="no";;
-				*) MYSQLOPTIMIZE_OPTIONS=${OPTARG};;
-			esac;;
-			m) check_yesno "${OPTARG}";
-			case $? in
-				0) SAVE_MYCNF="yes";;
-				1) SAVE_MYCNF="no";;
-				*) PATH_MYCNF=${OPTARG};;
-			esac;;
-			z) case ${OPTARG} in
-				xz|7z|gzip|bzip2) COMPRESSOR=${OPTARG};;
-				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
-				COMPRESSOR=no;;
-				*) echo "Wrong arg for -c option"; return 1;;
-			esac;;
-			o) case ${OPTARG} in
-				[Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
-				MYSQLDUMP_OPTIONS=;;
-				-*)
-				MYSQLDUMP_OPTIONS="${MYSQLDUMP_OPTIONS} ${OPTARG}";;
-				*) echo "Wrong arg for -o option: ${OPTARG}";
-				return 1;;
-			esac;;
-			L) LOCKFILE=${OPTARG};;
-			t) LOCKFILE_EXPIRE=${OPTARG};;
-			S) SLAVE_MODE="yes";;
-			v) DEBUG="yes";;
-			V) ONLY_PRINT_VERSION="yes";;
-			H) ONLY_PRINT_HELP="yes";;
+    while getopts ${OPTIONS} option $@; do
+        case ${option} in
+            u) MYSQL_USER=${OPTARG};;
+            h) MYSQL_HOST=${OPTARG};;
+            p) MYSQL_PASSWORD=${OPTARG};;
+            P) MYSQL_PASSWORD_FILE=${OPTARG};;
+            l) ARCHIVE_DAYS=${OPTARG};;
+            d) ARCHIVE_DIR=${OPTARG};;
+            a) DUMP_ALL="yes";;
+            F) FILE_MODE=${OPTARG};;
+            D) DIR_MODE=${OPTARG};;
+            C) check_yesno "${OPTARG}";
+            case $? in
+                0) CHECK_TABLES="yes";;
+                1) CHECK_TABLES="no";;
+                *) MYSQLCHECK_OPTIONS=${OPTARG};;
+            esac;;
+            O) check_yesno "${OPTARG}";
+            case $? in
+                0) OPTIMIZE_TABLES="yes";;
+                1) OPTIMIZE_TABLES="no";;
+                *) MYSQLOPTIMIZE_OPTIONS=${OPTARG};;
+            esac;;
+            m) check_yesno "${OPTARG}";
+            case $? in
+                0) SAVE_MYCNF="yes";;
+                1) SAVE_MYCNF="no";;
+                *) PATH_MYCNF=${OPTARG};;
+            esac;;
+            z) case ${OPTARG} in
+                xz|7z|gzip|bzip2) COMPRESSOR=${OPTARG};;
+                [Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
+                COMPRESSOR=no;;
+                *) echo "Wrong arg for -c option"; return 1;;
+            esac;;
+            o) case ${OPTARG} in
+                [Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
+                MYSQLDUMP_OPTIONS=;;
+                -*)
+                MYSQLDUMP_OPTIONS="${MYSQLDUMP_OPTIONS} ${OPTARG}";;
+                *) echo "Wrong arg for -o option: ${OPTARG}";
+                return 1;;
+            esac;;
+            L) LOCKFILE=${OPTARG};;
+            t) LOCKFILE_EXPIRE=${OPTARG};;
+            S) SLAVE_MODE="yes";;
+            v) DEBUG="yes";;
+            V) ONLY_PRINT_VERSION="yes";;
+            H) ONLY_PRINT_HELP="yes";;
             I) IGNORE_ERRORS="yes";;
-			?) exit 1;;
-		esac
-	done
+            ?) exit 1;;
+        esac
+    done
 
-	shift $(($OPTIND-1))
+    shift $(($OPTIND-1))
 
-	# Take the database name(s) if given in command line.
-	DUMP_DATABASE=$@
+    # Take the database name(s) if given in command line.
+    DUMP_DATABASE=$@
 
-	return 0
+    return 0
 }
 
 # This will check that any options set are not conflicts with each others and
 # all the necessary options are set.
 check_options() 
 {
-	# Was -v or -h keys specified?
-	check_yesno ${ONLY_PRINT_VERSION} && version
-	check_yesno ${ONLY_PRINT_HELP} && usage
+    # Was -v or -h keys specified?
+    check_yesno ${ONLY_PRINT_VERSION} && version
+    check_yesno ${ONLY_PRINT_HELP} && usage
 
-	# Either -a OR explicit database(s) name(s) must be specified, not
-	# both together.
-	if check_yesno "${DUMP_ALL}"; then
-		if [ ! -z "${DUMP_DATABASE}" ]; then
-			_str="Flag '-a' conflicts with explicit database"
-			_str="${_str} name given."
-			echo ${_str}
-			return 1
-		fi
-	else
-		if [ -z "${DUMP_DATABASE}" ]; then 
-			_str="Specify database name to dump or set '-a'"
-			_str="${_str} to dump all the available databases."
-			echo ${_str}
-			return 1
-		fi
-	fi
+    # Either -a OR explicit database(s) name(s) must be specified, not
+    # both together.
+    if check_yesno "${DUMP_ALL}"; then
+        if [ ! -z "${DUMP_DATABASE}" ]; then
+            _str="Flag '-a' conflicts with explicit database"
+            _str="${_str} name given."
+            echo ${_str}
+            return 1
+        fi
+    else
+        if [ -z "${DUMP_DATABASE}" ]; then 
+            _str="Specify database name to dump or set '-a'"
+            _str="${_str} to dump all the available databases."
+            echo ${_str}
+            return 1
+        fi
+    fi
 
-	# Check if all binaries exists and are executables.
-	binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
-	for binary in ${binaries}; do
-		if [ ! -x "${binary}" ]; then
-			_str="Binary \`${binary}' not found, "
-			_str="${_str} check your MYSQL_PREFIX path"
-			echo ${_str}
-			return 1
-		fi
-	done
+    # Check if all binaries exists and are executables.
+    binaries="${MYSQL} ${MYSQLDUMP} ${MYSQLCHECK} ${MYSQLOPTIMIZE}"
+    for binary in ${binaries}; do
+        if [ ! -x "${binary}" ]; then
+            _str="Binary \`${binary}' not found, "
+            _str="${_str} check your MYSQL_PREFIX path"
+            echo ${_str}
+            return 1
+        fi
+    done
 
-	# Can't specify both password and password file.
-	if [ ! -z "${MYSQL_PASSWORD}" -a \
-		! -z "${MYSQL_PASSWORD_FILE}" ]; then
-		echo "The -p and -P options are mutually exclusive"
-		return 1
-	fi
+    # Can't specify both password and password file.
+    if [ ! -z "${MYSQL_PASSWORD}" -a \
+        ! -z "${MYSQL_PASSWORD_FILE}" ]; then
+        echo "The -p and -P options are mutually exclusive"
+        return 1
+    fi
 
-	# Check for "ask" keyword and prompt password if keyword given.
-	if echo ${MYSQL_PASSWORD_FILE} |egrep -q "[Aa][Ss][Kk]"; then
-		# Preserve all the current settings for the terminal.
-		_stty=$(stty -g)
+    # Check for "ask" keyword and prompt password if keyword given.
+    if echo ${MYSQL_PASSWORD_FILE} |egrep -q "[Aa][Ss][Kk]"; then
+        # Preserve all the current settings for the terminal.
+        _stty=$(stty -g)
 
-		# Do not echo back every character typed while reading the
-		# password.
-		stty -echo
+        # Do not echo back every character typed while reading the
+        # password.
+        stty -echo
 
-		# Dash sheel doesn't support -t key for 'read'.
-		local k
-		case ${SHELL} in
-			bash|sh)
-				k=-t ${ASK_PASSWORD_TIMEOUT}
-				;;
-			*) k=
-				;;
-		esac
+        # Dash sheel doesn't support -t key for 'read'.
+        local k
+        case ${SHELL} in
+            bash|sh)
+                k=-t ${ASK_PASSWORD_TIMEOUT}
+                ;;
+            *) k=
+                ;;
+        esac
 
-		# Read the password.
-		read -p "Password: " $k MYSQL_PASSWORD && \
-			echo || \
-			echo "time out!"
+        # Read the password.
+        read -p "Password: " $k MYSQL_PASSWORD && \
+            echo || \
+            echo "time out!"
 
-		# Restore terminal settings.
-		stty ${_stty}
+        # Restore terminal settings.
+        stty ${_stty}
 
-		# Flush password file variable.
-		MYSQL_PASSWORD_FILE=
-	fi
+        # Flush password file variable.
+        MYSQL_PASSWORD_FILE=
+    fi
 
-	# Password file given, let's check if it is ok.
-	if [ ! -z "${MYSQL_PASSWORD_FILE}" ]; then
+    # Password file given, let's check if it is ok.
+    if [ ! -z "${MYSQL_PASSWORD_FILE}" ]; then
 
-		# Check if item is file and is accessable.
-		if [ ! -f "${MYSQL_PASSWORD_FILE}" -o \
-			! -r "${MYSQL_PASSWORD_FILE}" ]
-		then
-			echo "Can't read password file: ${MYSQL_PASSWORD_FILE}"
-			return 1
-		fi
+        # Check if item is file and is accessable.
+        if [ ! -f "${MYSQL_PASSWORD_FILE}" -o \
+            ! -r "${MYSQL_PASSWORD_FILE}" ]
+        then
+            echo "Can't read password file: ${MYSQL_PASSWORD_FILE}"
+            return 1
+        fi
 
-		# Check permissions: must not be world readable.
-		# First take the file permissions mode as a shell variable.
-		file_stat ${MYSQL_PASSWORD_FILE}
+        # Check permissions: must not be world readable.
+        # First take the file permissions mode as a shell variable.
+        file_stat ${MYSQL_PASSWORD_FILE}
 
-		# Yeld the last digit and check if `r' bit is set.
-		if [ $((${st_mode##${st_mode%%?}} & 4)) -ne 0 ]; then
-			echo "Password file is readable by others"
-			return 1
-		fi
+        # Yeld the last digit and check if `r' bit is set.
+        if [ $((${st_mode##${st_mode%%?}} & 4)) -ne 0 ]; then
+            echo "Password file is readable by others"
+            return 1
+        fi
 
-		# Password file must contain exactly one line (password).
-		_line_count=`wc -l ${MYSQL_PASSWORD_FILE} |awk '{print $1}' |\
-			tr -d ' '`
-		if [ ${_line_count} -ne 1 ]; then
-			echo "Password file MUST contain exactly one line"
-			return 1
-		fi
+        # Password file must contain exactly one line (password).
+        _line_count=`wc -l ${MYSQL_PASSWORD_FILE} |awk '{print $1}' |\
+            tr -d ' '`
+        if [ ${_line_count} -ne 1 ]; then
+            echo "Password file MUST contain exactly one line"
+            return 1
+        fi
 
-		# Seems that the password file is ok, so read it.
-		MYSQL_PASSWORD=`cat ${MYSQL_PASSWORD_FILE}`
-	fi
+        # Seems that the password file is ok, so read it.
+        MYSQL_PASSWORD=`cat ${MYSQL_PASSWORD_FILE}`
+    fi
 
-	# Keep entered password in secure: use MySQL option
-	# --defaults-extra-file to read MySQL client configuration.
-	if [ ! -z "${MYSQL_PASSWORD}" ]; then
+    # Keep entered password in secure: use MySQL option
+    # --defaults-extra-file to read MySQL client configuration.
+    if [ ! -z "${MYSQL_PASSWORD}" ]; then
 
-		# This will create temporary file only accessable by creator.
-		MYSQL_EXTRA_FILE=`mktemp /var/tmp/mysqlbackup.XXXXXX` || \
-		{ echo "Cannot create temporary file"; return 1; }
+        # This will create temporary file only accessable by creator.
+        MYSQL_EXTRA_FILE=`mktemp /var/tmp/mysqlbackup.XXXXXX` || \
+        { echo "Cannot create temporary file"; return 1; }
 
-		# Write the password. Handling carefully with Ubuntu's Linux
-		# /bin/sh (actually, dash) - it doesn't have -e option.
-		cat - >>${MYSQL_EXTRA_FILE} <<EOF
+        # Write the password. Handling carefully with Ubuntu's Linux
+        # /bin/sh (actually, dash) - it doesn't have -e option.
+        cat - >>${MYSQL_EXTRA_FILE} <<EOF
 [client]
 password=${MYSQL_PASSWORD}
 EOF
 
-		MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} \
-			--defaults-extra-file=${MYSQL_EXTRA_FILE}"
-	fi
+        MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} \
+            --defaults-extra-file=${MYSQL_EXTRA_FILE}"
+    fi
 
-	# Check the lockfile timeout: should be greater than zero.
-	[ "${LOCKFILE_EXPIRE}" -gt 0 ] >/dev/null 2>&1 ||\
-		{ echo "Timeout value must be numeric number of seconds" &&
-		return 1; }
+    # Check the lockfile timeout: should be greater than zero.
+    [ "${LOCKFILE_EXPIRE}" -gt 0 ] >/dev/null 2>&1 ||\
+        { echo "Timeout value must be numeric number of seconds" &&
+        return 1; }
 
-	# Seems that all is ok.
-	return 0
+    # Seems that all is ok.
+    return 0
 }
 
 # Output $@ if debug flag is enabled.
 debug() 
 {
-	check_yesno ${DEBUG} || return 0
-	echo "`date +%c` `basename $0` [$$]: $@"
-	return 0
+    check_yesno ${DEBUG} || return 0
+    echo "`date +%c` `basename $0` [$$]: $@"
+    return 0
 }
 
 # This will raise error end exit with custom error code if given as $1
 # argument.
 error()
 {
-	check_yesno ${DEBUG} || debug $@
-	echo "`date +%c` `basename $0` [$$]: $@"
+    check_yesno ${DEBUG} || debug $@
+    echo "`date +%c` `basename $0` [$$]: $@"
 
-	[ ! -z "$1" ] && code=1 || code=$?
+    [ ! -z "$1" ] && code=1 || code=$?
 
-	exit ${code}
+    exit ${code}
 }
 
 # Clean up before exit: release the lockfile, remove backup directory if
@@ -603,443 +604,443 @@ error()
 # traps while emergency or normal exit. 
 cleanup()
 {
-	debug "Cleaning up"
+    debug "Cleaning up"
 
-	# Remove extra defaults options.
-	if [ -n "${MYSQL_EXTRA_FILE}" -a -e "${MYSQL_EXTRA_FILE}" ]; then
-		debug "Removing extra options (${MYSQL_EXTRA_FILE})"
-		rm -f ${MYSQL_EXTRA_FILE} || \
-			debug "Problem removing extra options"
-	fi
+    # Remove extra defaults options.
+    if [ -n "${MYSQL_EXTRA_FILE}" -a -e "${MYSQL_EXTRA_FILE}" ]; then
+        debug "Removing extra options (${MYSQL_EXTRA_FILE})"
+        rm -f ${MYSQL_EXTRA_FILE} || \
+            debug "Problem removing extra options"
+    fi
 
-	# Remove backup directory if it was NOT completely created.
-	if check_yesno ${CLEANUP_BACKUP_DIR} ; then
-		if [ -d ${BACKUP_DIR} ]; then
-			debug "Removing backup directory"
-			rm -r ${BACKUP_DIR} 2>/dev/null
-		fi
-	fi
+    # Remove backup directory if it was NOT completely created.
+    if check_yesno ${CLEANUP_BACKUP_DIR} ; then
+        if [ -d ${BACKUP_DIR} ]; then
+            debug "Removing backup directory"
+            rm -r ${BACKUP_DIR} 2>/dev/null
+        fi
+    fi
 
-	# Start slave if it was stopped by us.
-	if check_yesno ${SLAVE_STOPPED}; then
-		${MYSQL} ${MYSQL_AUTH_KEYS} -e "START SLAVE;"
-		if [ $? -ne 0 ]; then
-			error "Can't start slave"
-		fi
-		debug "Slave started"
-		SLAVE_STOPPED="no"
-	fi
+    # Start slave if it was stopped by us.
+    if check_yesno ${SLAVE_STOPPED}; then
+        ${MYSQL} ${MYSQL_AUTH_KEYS} -e "START SLAVE;"
+        if [ $? -ne 0 ]; then
+            error "Can't start slave"
+        fi
+        debug "Slave started"
+        SLAVE_STOPPED="no"
+    fi
 
-	# Release lockfile only if it was created by THIS process.
-	if check_yesno ${CLEANUP_LOCKFILE}; then
-		[ -f ${LOCKFILE} ] && ( release_lockfile || \
-			debug "Problem removing lockfile" )
-	fi
+    # Release lockfile only if it was created by THIS process.
+    if check_yesno ${CLEANUP_LOCKFILE}; then
+        [ -f ${LOCKFILE} ] && ( release_lockfile || \
+            debug "Problem removing lockfile" )
+    fi
 
-	# Release `exit' trap to avoid cleanup loop.
-	trap - EXIT
+    # Release `exit' trap to avoid cleanup loop.
+    trap - EXIT
 
-	debug "Exit"
-	exit 0
+    debug "Exit"
+    exit 0
 }
 
 # Check that MySQL server is available with given credentials.
 check_mysql_connect() 
 {
-	local _mysql_out
+    local _mysql_out
 
-	# Check if we can reach MySQL server.
-	debug "Pinging MySQL..."
-	if ! ${MYSQL} ${MYSQL_AUTH_KEYS} -e "QUIT"; then
-		error "MySQL connect error"
-	fi
-	debug "MySQL ok"
+    # Check if we can reach MySQL server.
+    debug "Pinging MySQL..."
+    if ! ${MYSQL} ${MYSQL_AUTH_KEYS} -e "QUIT"; then
+        error "MySQL connect error"
+    fi
+    debug "MySQL ok"
 
-	# Are we run on slave?
-	if check_yesno ${SLAVE_MODE}; then
-		debug "Slave mode requested, checking slave"
+    # Are we run on slave?
+    if check_yesno ${SLAVE_MODE}; then
+        debug "Slave mode requested, checking slave"
 
-		_mysql_out=`${MYSQL} ${MYSQL_AUTH_KEYS} \
-			--batch -e "SHOW SLAVE STATUS\G" 2>&1 |\
-			grep "Slave_IO_Running:" |\
-			awk '{print $2}'`
-		if [ $? -ne 0 ]; then
-			error "MySQL error: ${_mysql_out}"
-		fi
+        _mysql_out=`${MYSQL} ${MYSQL_AUTH_KEYS} \
+            --batch -e "SHOW SLAVE STATUS\G" 2>&1 |\
+            grep "Slave_IO_Running:" |\
+            awk '{print $2}'`
+        if [ $? -ne 0 ]; then
+            error "MySQL error: ${_mysql_out}"
+        fi
 
-		# Empty output means no slave was configured.
-		if [ -z "${_mysql_out}" ]; then
-			debug "Slave not configured"
-			SLAVE_MODE="no"
-		elif [ "${_mysql_out}" != "Yes" ]; then
-			debug "Slave IO Running: No"
-		else
-			# Slave IO running, request to stop slave.
-			SLAVE_STOP="yes"
-			debug "Slave IO Running: Yes"
-		fi
-	fi
+        # Empty output means no slave was configured.
+        if [ -z "${_mysql_out}" ]; then
+            debug "Slave not configured"
+            SLAVE_MODE="no"
+        elif [ "${_mysql_out}" != "Yes" ]; then
+            debug "Slave IO Running: No"
+        else
+            # Slave IO running, request to stop slave.
+            SLAVE_STOP="yes"
+            debug "Slave IO Running: Yes"
+        fi
+    fi
 
-	return 0
+    return 0
 }
 
 # This function checks either do backup my.cnf configuration file or not.
 check_mycnf() 
 {
-	debug "Checking for my.cnf backup"
+    debug "Checking for my.cnf backup"
 
-	# Normalaize variable value.
-	check_yesno ${SAVE_MYCNF}
-	case $? in
-		0) SAVE_MYCNF="yes";;
-		1) SAVE_MYCNF="no";;
-		*) SAVE_MYCNF="no";;
-	esac
+    # Normalaize variable value.
+    check_yesno ${SAVE_MYCNF}
+    case $? in
+        0) SAVE_MYCNF="yes";;
+        1) SAVE_MYCNF="no";;
+        *) SAVE_MYCNF="no";;
+    esac
 
-	if check_yesno ${SAVE_MYCNF}; then
+    if check_yesno ${SAVE_MYCNF}; then
 
-		# Retrieve the data directory configuration value.
-		datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
-					-e "SHOW VARIABLES LIKE '%datadir%';" |\
-				awk '{print $2}'`
+        # Retrieve the data directory configuration value.
+        datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
+                    -e "SHOW VARIABLES LIKE '%datadir%';" |\
+                awk '{print $2}'`
 
-		# Replace macros if given in pathname.
-		PATH_MYCNF=`echo ${PATH_MYCNF} |\
-					sed -e "s#%%DATADIR%%#${datadir}#"`
+        # Replace macros if given in pathname.
+        PATH_MYCNF=`echo ${PATH_MYCNF} |\
+                    sed -e "s#%%DATADIR%%#${datadir}#"`
 
-		# The last check - if file is readable, will backup it.
-		if [ -f ${PATH_MYCNF} ]; then
-			debug "Will backup my.cnf from: ${PATH_MYCNF}"
-		else
-			debug "Will not backup my.cnf (no access)"
-			SAVE_MYCNF="no"
-		fi
-	else
-		debug "Will not backup my.cnf"
-	fi
+        # The last check - if file is readable, will backup it.
+        if [ -f ${PATH_MYCNF} ]; then
+            debug "Will backup my.cnf from: ${PATH_MYCNF}"
+        else
+            debug "Will not backup my.cnf (no access)"
+            SAVE_MYCNF="no"
+        fi
+    else
+        debug "Will not backup my.cnf"
+    fi
 
-	return 0
+    return 0
 }
 
 # Set and create directory where to save backups based on date or backup
 # number.
 create_target_dir() 
-{	
-	debug "Reading datadir from MySQL"
-	datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
-				-e "SHOW VARIABLES LIKE '%datadir%';" |\
-			awk '{print $2}'`
-	debug "MySQL says: ${datadir}"
-	datadir=`basename ${datadir}`
+{    
+    debug "Reading datadir from MySQL"
+    datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
+                -e "SHOW VARIABLES LIKE '%datadir%';" |\
+            awk '{print $2}'`
+    debug "MySQL says: ${datadir}"
+    datadir=`basename ${datadir}`
 
-	# We will preserve previous backups untouched.
-	date_suffix=`date +%Y%m%d`
-	max_oneday_backups=20
+    # We will preserve previous backups untouched.
+    date_suffix=`date +%Y%m%d`
+    max_oneday_backups=20
 
-	# Today's backup already done, take the next directory name.
-	if [ -d "${ARCHIVE_DIR}/${datadir}/${date_suffix}" ]; then
-		i=1
-		while [ $i -le ${max_oneday_backups} ]; do
-			_d="${ARCHIVE_DIR}/${datadir}/${date_suffix}.$i"
+    # Today's backup already done, take the next directory name.
+    if [ -d "${ARCHIVE_DIR}/${datadir}/${date_suffix}" ]; then
+        i=1
+        while [ $i -le ${max_oneday_backups} ]; do
+            _d="${ARCHIVE_DIR}/${datadir}/${date_suffix}.$i"
 
-			# Take the first unused name.
-			if [ ! -d ${_d} ]; then
-				date_suffix="${date_suffix}.$i"
-				break
-			fi
-			i=$(($i+1))
-		done
+            # Take the first unused name.
+            if [ ! -d ${_d} ]; then
+                date_suffix="${date_suffix}.$i"
+                break
+            fi
+            i=$(($i+1))
+        done
 
-		# Preserve any error with directory naming.
-		[ $i -ge ${max_oneday_backups} ] && ( \
-			_str="Too much similar backups found," && \
-			_str="${_str} consider remove previous backups." && \
-			error ${_str} )
-	fi
+        # Preserve any error with directory naming.
+        [ $i -ge ${max_oneday_backups} ] && ( \
+            _str="Too much similar backups found," && \
+            _str="${_str} consider remove previous backups." && \
+            error ${_str} )
+    fi
 
-	local _dirs="${ARCHIVE_DIR} \
-			${ARCHIVE_DIR}/${datadir} \
-			${ARCHIVE_DIR}/${datadir}/${date_suffix}"
-	
-	# Create directories with given directory mode permissions.
-	for dir in ${_dirs}; do
-		[ -d ${dir} ] && continue
-		debug "Creating directory: ${dir}"
-		if ! mkdir -m ${DIR_MODE} ${dir}; then
-			error "Can't create directory: ${dir}"
-			return 1
-		fi
-	done
+    local _dirs="${ARCHIVE_DIR} \
+            ${ARCHIVE_DIR}/${datadir} \
+            ${ARCHIVE_DIR}/${datadir}/${date_suffix}"
+    
+    # Create directories with given directory mode permissions.
+    for dir in ${_dirs}; do
+        [ -d ${dir} ] && continue
+        debug "Creating directory: ${dir}"
+        if ! mkdir -m ${DIR_MODE} ${dir}; then
+            error "Can't create directory: ${dir}"
+            return 1
+        fi
+    done
 
-	BACKUP_DIR="${ARCHIVE_DIR}/${datadir}/${date_suffix}"
+    BACKUP_DIR="${ARCHIVE_DIR}/${datadir}/${date_suffix}"
 
-	return 0
+    return 0
 }
 
 # Remove older backups.
 remove_old_backups() 
 {
-	debug "Removing old backups"
+    debug "Removing old backups"
 
-	local d=$((${ARCHIVE_DAYS} + 1))
+    local d=$((${ARCHIVE_DAYS} + 1))
 
-	# Different OS'es handle dates differently.
-	local _date_flags
-	local _uname_s=`uname -s`
-	case ${_uname_s} in
-		Linux)
-			 _date_flags="--date=\$d day ago"
-		;;
-		FreeBSD)
-			 _date_flags="-v-\${d}d"
-		;;
-		*)
-			debug "Not yet supported for $_uname_s";
-			return 1
-		;;
-	esac
+    # Different OS'es handle dates differently.
+    local _date_flags
+    local _uname_s=`uname -s`
+    case ${_uname_s} in
+        Linux)
+             _date_flags="--date=\$d day ago"
+        ;;
+        FreeBSD)
+             _date_flags="-v-\${d}d"
+        ;;
+        *)
+            debug "Not yet supported for $_uname_s";
+            return 1
+        ;;
+    esac
 
-	while [ ${d} -lt $((${ARCHIVE_DAYS} + 30)) ]; do
-		_date_flags_e=`eval "echo ${_date_flags}"`
-		_purge_date=`date "${_date_flags_e}" +%Y%m%d`
-		find ${BACKUP_DIR}/../ \
-			-maxdepth 1 \
-			-mindepth 1 \
-			-name "${_purge_date}*" \
-			-type d \
-			-exec rm -r {} \;
-		d=$((${d} + 1))
-	done
+    while [ ${d} -lt $((${ARCHIVE_DAYS} + 30)) ]; do
+        _date_flags_e=`eval "echo ${_date_flags}"`
+        _purge_date=`date "${_date_flags_e}" +%Y%m%d`
+        find ${BACKUP_DIR}/../ \
+            -maxdepth 1 \
+            -mindepth 1 \
+            -name "${_purge_date}*" \
+            -type d \
+            -exec rm -r {} \;
+        d=$((${d} + 1))
+    done
 
-	return 0
+    return 0
 }
 
 # Stop slave and save it's status if "slave mode" requested.
 handle_slave_mode()
 {
-	if ! check_yesno ${SLAVE_MODE}; then
-		return 0
-	fi
+    if ! check_yesno ${SLAVE_MODE}; then
+        return 0
+    fi
 
-	if [ ! -e "${BACKUP_DIR}" ]; then
-		debug "Backup dir does not exist?"
-		return 1
-	fi
+    if [ ! -e "${BACKUP_DIR}" ]; then
+        debug "Backup dir does not exist?"
+        return 1
+    fi
 
-	if ! check_yesno ${SLAVE_STOP}; then
-		debug "Don't need to stop slave"
-	else
-		${MYSQL} ${MYSQL_AUTH_KEYS} -e "STOP SLAVE;"
-		if [ $? -ne 0 ]; then
-			error "Can't stop slave"
-		fi
-		debug "Slave stopped"
-		SLAVE_STOPPED="yes"
-	fi
+    if ! check_yesno ${SLAVE_STOP}; then
+        debug "Don't need to stop slave"
+    else
+        ${MYSQL} ${MYSQL_AUTH_KEYS} -e "STOP SLAVE;"
+        if [ $? -ne 0 ]; then
+            error "Can't stop slave"
+        fi
+        debug "Slave stopped"
+        SLAVE_STOPPED="yes"
+    fi
 
-	${MYSQL} ${MYSQL_AUTH_KEYS} --batch -e "SHOW SLAVE STATUS\G" \
-		> ${BACKUP_DIR}/${SLAVE_STATUS_FILE}
-	if [ $? -ne 0 ]; then
-		debug "Can't get slave status"
-	fi
-	debug "Slave status saved: ${BACKUP_DIR}/${SLAVE_STATUS_FILE}"
+    ${MYSQL} ${MYSQL_AUTH_KEYS} --batch -e "SHOW SLAVE STATUS\G" \
+        > ${BACKUP_DIR}/${SLAVE_STATUS_FILE}
+    if [ $? -ne 0 ]; then
+        debug "Can't get slave status"
+    fi
+    debug "Slave status saved: ${BACKUP_DIR}/${SLAVE_STATUS_FILE}"
 
-	return 0
+    return 0
 }
 
 # Create databases-to-backup list.
 get_databases() 
 {
-	BACKUP_DATABASES=
+    BACKUP_DATABASES=
 
-	# -a key given?
-	if check_yesno ${DUMP_ALL}; then
-		debug "Reading available databases"
-		BACKUP_DATABASES=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
-					-e "SHOW DATABASES;" |\
-				egrep -v ^information_schema$`
-		[ $? -eq 0 ] || error "Can't get available databases"
+    # -a key given?
+    if check_yesno ${DUMP_ALL}; then
+        debug "Reading available databases"
+        BACKUP_DATABASES=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
+                    -e "SHOW DATABASES;" |\
+                egrep -v ^information_schema$`
+        [ $? -eq 0 ] || error "Can't get available databases"
 
-	else
-		# Select databases by matching pattern.
-		for database in ${DUMP_DATABASE}; do
-			db=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
-				-e "SHOW DATABASES LIKE '${database}';"`
-			[ $? -eq 0 ] || error "Can't use database: ${database}"
-			BACKUP_DATABASES="${BACKUP_DATABASES} ${db}"
-		done
-	fi
+    else
+        # Select databases by matching pattern.
+        for database in ${DUMP_DATABASE}; do
+            db=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
+                -e "SHOW DATABASES LIKE '${database}';"`
+            [ $? -eq 0 ] || error "Can't use database: ${database}"
+            BACKUP_DATABASES="${BACKUP_DATABASES} ${db}"
+        done
+    fi
 
-	count=`echo ${BACKUP_DATABASES} |wc -w |tr -d ' '`
-	[ -z "${count}" ] && count=0
-	debug "Got ${count} database(s)"
+    count=`echo ${BACKUP_DATABASES} |wc -w |tr -d ' '`
+    [ -z "${count}" ] && count=0
+    debug "Got ${count} database(s)"
 
-	if [ ${count} -le 0 ]; then
-		debug "Nothing to do, exiting"
-		exit $?
-	fi
+    if [ ${count} -le 0 ]; then
+        debug "Nothing to do, exiting"
+        exit $?
+    fi
 
-	return 0
+    return 0
 }
 
 # Backup databases.
 do_backup() 
 {
-	[ ! -z "${BACKUP_DATABASES}" ] || return 0
+    [ ! -z "${BACKUP_DATABASES}" ] || return 0
 
-	# Select correct compressor program and suffix.
-	case ${COMPRESSOR} in
-		xz) _compressor=`which xz || echo cat`;
-		_suffix="sql.xz";;
-		gzip) _compressor=`which gzip || echo cat`;
-		_suffix="sql.gz";;
-		bzip2) _compressor=`which bzip2 || echo cat`;
-		_suffix="sql.bz2";;
-		7z) _compressor=`which 7z || echo cat`;
-		_suffix="sql.7z";;
-		*) _compressor=`which cat`; _suffix="sql";;
-	esac
+    # Select correct compressor program and suffix.
+    case ${COMPRESSOR} in
+        xz) _compressor=`which xz || echo cat`;
+        _suffix="sql.xz";;
+        gzip) _compressor=`which gzip || echo cat`;
+        _suffix="sql.gz";;
+        bzip2) _compressor=`which bzip2 || echo cat`;
+        _suffix="sql.bz2";;
+        7z) _compressor=`which 7z || echo cat`;
+        _suffix="sql.7z";;
+        *) _compressor=`which cat`; _suffix="sql";;
+    esac
 
-	[ -z "${_compressor}" -o ! -x "${_compressor}" ] && \
-		error "Can not find compressor or any pager program"
+    [ -z "${_compressor}" -o ! -x "${_compressor}" ] && \
+        error "Can not find compressor or any pager program"
 
-	[ "${_compressor##*/}" = "cat" ] && _suffix="sql"
-	debug "Using \`${_compressor}' program as compressor"
+    [ "${_compressor##*/}" = "cat" ] && _suffix="sql"
+    debug "Using \`${_compressor}' program as compressor"
 
-	_check_tables="no"
-	if check_yesno ${CHECK_TABLES}; then
-		_check_tables="yes"
-	fi
-	_optimize_tables="no"
-	if check_yesno ${OPTIMIZE_TABLES}; then
-		_optimize_tables="yes"
-	fi
+    _check_tables="no"
+    if check_yesno ${CHECK_TABLES}; then
+        _check_tables="yes"
+    fi
+    _optimize_tables="no"
+    if check_yesno ${OPTIMIZE_TABLES}; then
+        _optimize_tables="yes"
+    fi
 
-	db_count=0
-	db_total=`echo ${BACKUP_DATABASES} |wc -w`
-	for db in ${BACKUP_DATABASES}; do
-		db_count=$((${db_count}+1)) 
-		db_left=$((${db_total}-${db_count}))
-		debug "${db}: doing database backup (${db_left} left)"
+    db_count=0
+    db_total=`echo ${BACKUP_DATABASES} |wc -w`
+    for db in ${BACKUP_DATABASES}; do
+        db_count=$((${db_count}+1)) 
+        db_left=$((${db_total}-${db_count}))
+        debug "${db}: doing database backup (${db_left} left)"
 
-		# Get tables in database. This is need to check if table engine
-		# allows checking or optimizing.
-		tables_total=`${MYSQL} \
-				${MYSQL_AUTH_KEYS} \
-				${MYSQL_KEYS} \
-				${db} \
-				-e "SHOW TABLES;"`
+        # Get tables in database. This is need to check if table engine
+        # allows checking or optimizing.
+        tables_total=`${MYSQL} \
+                ${MYSQL_AUTH_KEYS} \
+                ${MYSQL_KEYS} \
+                ${db} \
+                -e "SHOW TABLES;"`
 
-		# No tables found, nothing to do?
-		tables_total_c=`echo ${tables_total} |wc -w |tr -d ' '`
-		if [ ${tables_total_c} -le 0 ]; then
-			debug "${db}: no tables found, skipping"
-			continue
-		fi
-		debug "${db}: ${tables_total_c} table(s) found in total"
+        # No tables found, nothing to do?
+        tables_total_c=`echo ${tables_total} |wc -w |tr -d ' '`
+        if [ ${tables_total_c} -le 0 ]; then
+            debug "${db}: no tables found, skipping"
+            continue
+        fi
+        debug "${db}: ${tables_total_c} table(s) found in total"
 
-		# Check tables.
-		if [ ${_check_tables} = "yes" ]; then
+        # Check tables.
+        if [ ${_check_tables} = "yes" ]; then
 
-			# Not all tables are ready to check or optimize.  We
-			# should trim off such tables from the all tables list.
-			local tables_checkready=""
+            # Not all tables are ready to check or optimize.  We
+            # should trim off such tables from the all tables list.
+            local tables_checkready=""
 
-			for engine in ${CHECK_READY_ENGINES}; do
+            for engine in ${CHECK_READY_ENGINES}; do
 
-				# Get tables with one of checkready-engine
-				_tables=`${MYSQL} \
-					${MYSQL_AUTH_KEYS} \
-					${MYSQL_KEYS} \
-					${db} \
-					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
-					awk '{print $1}'`
-				
-				# Try another engine if no tables with such engine found.
-				local _tables_c=`echo ${_tables} |wc -w |tr -d ' '`
-				[ ${_tables_c} -eq 0 ] && continue;
-				debug "${db}: check: ${_tables_c} ${engine}-engine table(s)"
+                # Get tables with one of checkready-engine
+                _tables=`${MYSQL} \
+                    ${MYSQL_AUTH_KEYS} \
+                    ${MYSQL_KEYS} \
+                    ${db} \
+                    -e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
+                    awk '{print $1}'`
+                
+                # Try another engine if no tables with such engine found.
+                local _tables_c=`echo ${_tables} |wc -w |tr -d ' '`
+                [ ${_tables_c} -eq 0 ] && continue;
+                debug "${db}: check: ${_tables_c} ${engine}-engine table(s)"
   
-				tables_checkready="${tables_checkready} ${_tables}"
-			done
+                tables_checkready="${tables_checkready} ${_tables}"
+            done
 
-			tables_checkready_c=`echo ${tables_checkready} |wc -w |tr -d ' '`
-			debug "${db}: check: will try to check ${tables_checkready_c} table(s)"
+            tables_checkready_c=`echo ${tables_checkready} |wc -w |tr -d ' '`
+            debug "${db}: check: will try to check ${tables_checkready_c} table(s)"
 
-			# Check tables filtered by engine.
-			debug "${db}: check: checking tables"
-			c=0
-			for table in ${tables_checkready}; do
-				if ! ${MYSQLCHECK} \
-					${MYSQL_AUTH_KEYS} \
-					${MYSQLCHECK_OPTIONS} \
-					${db} ${table}; then
-					debug "${db}: check: ${table} check fail"
+            # Check tables filtered by engine.
+            debug "${db}: check: checking tables"
+            c=0
+            for table in ${tables_checkready}; do
+                if ! ${MYSQLCHECK} \
+                    ${MYSQL_AUTH_KEYS} \
+                    ${MYSQLCHECK_OPTIONS} \
+                    ${db} ${table}; then
+                    debug "${db}: check: ${table} check fail"
                     continue
-				fi
-				c=$((c+1))
-				#debug "${db}: check: ${table} check ok"
-			done
-			debug "${db}: check: checked ${c} table(s)"
-		fi
+                fi
+                c=$((c+1))
+                #debug "${db}: check: ${table} check ok"
+            done
+            debug "${db}: check: checked ${c} table(s)"
+        fi
 
-		# Optimize tables.
-		if [ ${_optimize_tables} = "yes" ]; then
+        # Optimize tables.
+        if [ ${_optimize_tables} = "yes" ]; then
 
-			# Collect OPTIMIZE-ready tables names into
-			# tables_optimizeready array.
-			local tables_optimizeready=""
+            # Collect OPTIMIZE-ready tables names into
+            # tables_optimizeready array.
+            local tables_optimizeready=""
 
-			# Foreach engines that has known compatibility with
-			# OPTIMIZE.
-			for engine in ${OPTIMIZE_READY_ENGINES}; do
+            # Foreach engines that has known compatibility with
+            # OPTIMIZE.
+            for engine in ${OPTIMIZE_READY_ENGINES}; do
 
-				# Get tables with one of the optimize-ready
-				# engine.
-				_tables=`${MYSQL} \
-					${MYSQL_AUTH_KEYS} \
-					${MYSQL_KEYS} \
-					${db} \
-					-e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
-					awk '{print $1}'`
-				
-				# Try another engine if no tables with such
-				# engine found.
-				_tables_c=`echo ${_tables} |wc -w |tr -d ' '`
-				[ ${_tables_c} -eq 0 ] && continue;
-				debug "${db}: optimize: ${_tables_c} ${engine}-engine table(s)"
+                # Get tables with one of the optimize-ready
+                # engine.
+                _tables=`${MYSQL} \
+                    ${MYSQL_AUTH_KEYS} \
+                    ${MYSQL_KEYS} \
+                    ${db} \
+                    -e "SHOW TABLE STATUS WHERE Engine LIKE '${engine}';" |\
+                    awk '{print $1}'`
+                
+                # Try another engine if no tables with such
+                # engine found.
+                _tables_c=`echo ${_tables} |wc -w |tr -d ' '`
+                [ ${_tables_c} -eq 0 ] && continue;
+                debug "${db}: optimize: ${_tables_c} ${engine}-engine table(s)"
 
-				# Catenate arrays with previous search results
-				# (if was).
-				tables_optimizeready="${tables_optimizeready} ${_tables}"
-			done
+                # Catenate arrays with previous search results
+                # (if was).
+                tables_optimizeready="${tables_optimizeready} ${_tables}"
+            done
 
-			tables_optimizeready_c=`echo ${tables_optimizeready} |wc -w |tr -d ' '`
-			debug "${db}: optimize: will try to optimize ${tables_optimizeready_c} table(s)"
+            tables_optimizeready_c=`echo ${tables_optimizeready} |wc -w |tr -d ' '`
+            debug "${db}: optimize: will try to optimize ${tables_optimizeready_c} table(s)"
 
-			# Check tables filtered by engine.
-			c=0
-			for table in ${tables_optimizeready}; do
-				if ! ${MYSQLOPTIMIZE} \
-					${MYSQL_AUTH_KEYS} \
-					${MYSQLOPTIMIZE_OPTIONS} \
-					${db} ${table}; then
-					debug "${db}: optimize: table ${table} optimizing failed"
+            # Check tables filtered by engine.
+            c=0
+            for table in ${tables_optimizeready}; do
+                if ! ${MYSQLOPTIMIZE} \
+                    ${MYSQL_AUTH_KEYS} \
+                    ${MYSQLOPTIMIZE_OPTIONS} \
+                    ${db} ${table}; then
+                    debug "${db}: optimize: table ${table} optimizing failed"
                     continue
-				fi
-				c=$((c+1))
-				#debug "${db}: ${table} optimize ok"
-			done
-			debug "${db}: optimize: optimized ${c} table(s)"
-		fi
+                fi
+                c=$((c+1))
+                #debug "${db}: ${table} optimize ok"
+            done
+            debug "${db}: optimize: optimized ${c} table(s)"
+        fi
 
-		local _out_file=${BACKUP_DIR}/${db}
-		# Invoke mysqldump(1) for database
-		debug "${db}: dumping"
-		${MYSQLDUMP} \
-			${MYSQL_AUTH_KEYS} \
-			${MYSQLDUMP_OPTIONS} \
-			${db} > ${_out_file}
+        local _out_file=${BACKUP_DIR}/${db}
+        # Invoke mysqldump(1) for database
+        debug "${db}: dumping"
+        ${MYSQLDUMP} \
+            ${MYSQL_AUTH_KEYS} \
+            ${MYSQLDUMP_OPTIONS} \
+            ${db} > ${_out_file}
         _rc=$?
 
         if [ ${_rc} -ne 0 ]; then
@@ -1050,84 +1051,84 @@ do_backup()
             fi
             debug "${db}: error occurred (rc=${_rc}), ignored"
         else
-		    debug "${db}: dumped"
+            debug "${db}: dumped"
         fi
-		
-		if [ "${_compressor##*/}" != "cat" ]; then
+        
+        if [ "${_compressor##*/}" != "cat" ]; then
 
-			debug "${db}: compressing"
-			case ${_compressor} in
-				*/xz|*/bzip2|*/gzip)
-					${_compressor} --stdout ${_out_file} \
-						> ${_out_file}.${_suffix} || \
-						return $?
-				;;
-				*/7z)
-					# If verbose mode is inactive - volume
-					# down 7z compressor. I can't find any
-					# tunes to disable all the output from
-					# this compressor.
-					if ! check_yesno ${DEBUG} ; then
-						${_compressor} -bd a \
-						${_out_file}.${_suffix} \
-						${_out_file} 1>/dev/null || \
-						return $?
-					else
-						${_compressor} -bd a \
-						${_out_file}.${_suffix} \
-						${_out_file} || \
-						return $?
-					fi
-				;;
-			esac
-			debug "${db}: compressed"
+            debug "${db}: compressing"
+            case ${_compressor} in
+                */xz|*/bzip2|*/gzip)
+                    ${_compressor} --stdout ${_out_file} \
+                        > ${_out_file}.${_suffix} || \
+                        return $?
+                ;;
+                */7z)
+                    # If verbose mode is inactive - volume
+                    # down 7z compressor. I can't find any
+                    # tunes to disable all the output from
+                    # this compressor.
+                    if ! check_yesno ${DEBUG} ; then
+                        ${_compressor} -bd a \
+                        ${_out_file}.${_suffix} \
+                        ${_out_file} 1>/dev/null || \
+                        return $?
+                    else
+                        ${_compressor} -bd a \
+                        ${_out_file}.${_suffix} \
+                        ${_out_file} || \
+                        return $?
+                    fi
+                ;;
+            esac
+            debug "${db}: compressed"
 
-			rm ${_out_file}
+            rm ${_out_file}
 
-			_out_file=${_out_file}.${_suffix}
-		fi
+            _out_file=${_out_file}.${_suffix}
+        fi
 
-		# Set file mode
-		chmod ${FILE_MODE} ${_out_file}
-	done
+        # Set file mode
+        chmod ${FILE_MODE} ${_out_file}
+    done
 
-	# Backup my.cnf
-	if check_yesno ${SAVE_MYCNF}; then
-		mycnf=`basename ${PATH_MYCNF}`
-		debug "Backup my.cnf: ${PATH_MYCNF} -> ${BACKUP_DIR}/${mycnf}"
-		cp ${PATH_MYCNF} ${BACKUP_DIR}/${mycnf}
-		chmod ${FILE_MODE} ${BACKUP_DIR}/${mycnf}
-	fi
+    # Backup my.cnf
+    if check_yesno ${SAVE_MYCNF}; then
+        mycnf=`basename ${PATH_MYCNF}`
+        debug "Backup my.cnf: ${PATH_MYCNF} -> ${BACKUP_DIR}/${mycnf}"
+        cp ${PATH_MYCNF} ${BACKUP_DIR}/${mycnf}
+        chmod ${FILE_MODE} ${BACKUP_DIR}/${mycnf}
+    fi
 
-	# Set flag "do not remove backups while doing cleanup()"
-	CLEANUP_BACKUP_DIR="no"
+    # Set flag "do not remove backups while doing cleanup()"
+    CLEANUP_BACKUP_DIR="no"
 
-	return 0
+    return 0
 }
 
 # Remember the time of successful completion.
 set_done_flag()
 {
-	date +%s > ${BACKUP_DIR}/.done
+    date +%s > ${BACKUP_DIR}/.done
 
-	return $?
+    return $?
 }
 
 # The main cycle.
 main() 
 {
-	debug "Ready (version ${VERSION}, rev${REVISION% $})"
-	check_mysql_connect || return $?
-	create_target_dir || return $?
-	handle_slave_mode || return $?
-	check_mycnf || return $?
-	get_databases || return $?
-	do_backup || return $?
-	remove_old_backups || return $?
-	set_done_flag || return $?
-	debug "Done"
+    debug "Ready (version ${VERSION}, rev${REVISION% $})"
+    check_mysql_connect || return $?
+    create_target_dir || return $?
+    handle_slave_mode || return $?
+    check_mycnf || return $?
+    get_databases || return $?
+    do_backup || return $?
+    remove_old_backups || return $?
+    set_done_flag || return $?
+    debug "Done"
 
-	return 0
+    return 0
 }
 
 # Make sure we find utilities from the base system
@@ -1155,10 +1156,10 @@ CLEANUP_LOCKFILE="yes"
 
 # Define authorization credentials if they are set.
 [ ! -z ${MYSQL_USER} ] && \
-	MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --user=${MYSQL_USER}"
+    MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --user=${MYSQL_USER}"
 
 [ ! -z ${MYSQL_HOST} ] && \
-	MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --host=${MYSQL_HOST}"
+    MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --host=${MYSQL_HOST}"
 
 # Use shortcuts for signals to deal with Linux's sh.
 trap cleanup INT TERM EXIT
