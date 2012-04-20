@@ -8,6 +8,14 @@ $Id$
 .BR periodic (8)
 
 [USAGE]
+\fBmysqlbackup\fR exits on error in mysqldump(1) execution unless \fB-I\fR
+option given. On exit forced by some error, \fBmysqlbackup\fR clean up its
+workdir and backup does not created. You may want to track \fBmysqlbackup\fR's
+errors on a scheduled jobs to avoid the situation when no backups created at
+all when something prevents \fBmysqlbackup\fR from normal execution. Check
+\fB.done\fR flag-file within destination directory. Once backup succeeded, this
+file is created and timestamp is written to it.
+.P
 \fBmysqlbackup\fR package comes with a number of
 .BR periodic(8)
 scripts allowing to create periodic backups even more transparently. There is
@@ -58,8 +66,7 @@ The method of specifying your MySQL password with \fB-p\fR option must be
 considered \fIextremely insecure\fR and should not be used. Your password
 becomes visible to system status programs such as
 .BR ps(1)
-that may be invoked by other users
-to display command lines. 
+that may be invoked by other users to display command lines. 
 
 Store your password in an option file. For example, you can list your password
 in the [client] section of the \fI.my.cnf\fR file in your home directory:
