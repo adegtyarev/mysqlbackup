@@ -3,6 +3,9 @@
 #
 # MySQL backup tool.
 #
+# Copyright 2010-2012, Alexey Degtyarev <alexey@renatasystems.org>.
+# All rights reserved.
+#
 # $Id$
 
 REVISION="$Revision$"
