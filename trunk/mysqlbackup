@@ -3,7 +3,7 @@
 #
 # MySQL backup tool.
 #
-# Copyright 2010-2012, Alexey Degtyarev <alexey@renatasystems.org>.
+# Copyright 2010-2012, Alexey V. Degtyarev <alexey@renatasystems.org>.
 # All rights reserved.
 #
 # $Id$
@@ -24,7 +24,7 @@ DEFAULT_SAVE_MYCNF="yes"              # Either save my.cnf or not
 DEFAULT_PATH_MYCNF="%%DATADIR%%my.cnf"    # Macros will be replaced
 DEFAULT_CHECK_TABLES="yes"            # yes | no
 DEFAULT_OPTIMIZE_TABLES="yes"         # yes | no
-DEFAULT_LOCKFILE="/var/tmp/mysqlbackup.lock"    # Path to lockfile.
+DEFAULT_LOCKFILE="/var/tmp/mysqlbackup.%%UID%%.lock"    # Path to lockfile.
 DEFAULT_LOCKFILE_EXPIRE=90000         # Seconds to expire lockfile.
 DEFAULT_SLAVE_STATUS_FILE="slave-status"    # Filename for slave status.
 
@@ -146,10 +146,10 @@ EOF
 # Outputs program version and exit.
 version() 
 {
-    cat <<EOF
-$(basename $0) ${VERSION}
+    cat <<- EOF
+    $(basename $0) ${VERSION}
 
-Written by Alexey V. Degtyarev
+    Written by Alexey V. Degtyarev
 EOF
 
     # Do not debug cleanup() trap.
@@ -184,6 +184,7 @@ check_yesno()
 check_lockfile()
 {
     [ -f "${LOCKFILE}" ] || return 0
+    [ -r "${LOCKFILE}" ] || return 1
 
     file_stat ${LOCKFILE}
 
@@ -261,6 +262,7 @@ check_process()
 touch_lockfile()
 {
     echo $$ >${LOCKFILE} || return $?
+    chmod 600 ${LOCKFILE}
     return 0
 }
 
@@ -304,8 +306,6 @@ set_defaults()
     PATH_MYCNF=${DEFAULT_PATH_MYCNF}
     CHECK_TABLES=${DEFAULT_CHECK_TABLES}
     OPTIMIZE_TABLES=${DEFAULT_OPTIMIZE_TABLES}
-    LOCKFILE=${DEFAULT_LOCKFILE}
-    LOCKFILE_EXPIRE=${DEFAULT_LOCKFILE_EXPIRE}
     ONLY_PRINT_VERSION="no"
     ONLY_PRINT_HELP="no"
     CLEANUP_BACKUP_DIR="yes"
@@ -342,6 +342,10 @@ set_defaults()
     MYSQLDUMP="${MYSQL_PREFIX}/bin/mysqldump"
     MYSQLCHECK="${MYSQL_PREFIX}/bin/mysqlcheck"
     MYSQLOPTIMIZE="${MYSQL_PREFIX}/bin/mysqlcheck"
+
+    _id=`id -u || echo 65534`
+    LOCKFILE=`echo -n ${DEFAULT_LOCKFILE} |sed -E "s#%%UID%%#${_id}#g"`
+    LOCKFILE_EXPIRE=${DEFAULT_LOCKFILE_EXPIRE}
 
     return 0
 }
@@ -564,9 +568,9 @@ check_options()
 
         # Write the password. Handling carefully with Ubuntu's Linux
         # /bin/sh (actually, dash) - it doesn't have -e option.
-        cat - >>${MYSQL_EXTRA_FILE} <<EOF
-[client]
-password=${MYSQL_PASSWORD}
+        cat - >>${MYSQL_EXTRA_FILE} <<- EOF
+        [client]
+        password=${MYSQL_PASSWORD}
 EOF
 
         MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} \
@@ -1050,7 +1054,7 @@ do_backup()
             # Are we forced to ignore any errors?
             if ! check_yesno ${IGNORE_ERRORS} ; then
                 debug "${db}: error occurred (rc=${_rc})"
-                return $?
+                return ${_rc}
             fi
             debug "${db}: error occurred (rc=${_rc}), ignored"
         else
@@ -1115,6 +1119,16 @@ set_done_flag()
     date +%s > ${BACKUP_DIR}/.done
 
     return $?
+}
+
+analyze_done_flag()
+{
+    # Retrieve the data directory configuration value.
+    local datadir=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
+                -e "SHOW VARIABLES LIKE '%datadir%';" |\
+            awk '{print $2}'`
+
+    DATADIR=
 }
 
 # The main cycle.
