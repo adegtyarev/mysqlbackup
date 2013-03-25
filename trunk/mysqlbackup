@@ -9,7 +9,7 @@
 # $Id$
 
 REVISION="$Revision$"
-VERSION="2.6-trunk"
+VERSION="2.7-trunk"
 
 # Some default values.
 DEFAULT_ARCHIVE_DAYS=5                # How long to keep backups.
@@ -613,6 +613,16 @@ cleanup()
 {
     debug "Cleaning up"
 
+    # Start slave if it was stopped by us.
+    if check_yesno ${SLAVE_STOPPED}; then
+        ${MYSQL} ${MYSQL_AUTH_KEYS} -e "START SLAVE;"
+        if [ $? -ne 0 ]; then
+            error "Can't start slave"
+        fi
+        debug "Slave started"
+        SLAVE_STOPPED="no"
+    fi
+
     # Remove extra defaults options.
     if [ -n "${MYSQL_EXTRA_FILE}" -a -e "${MYSQL_EXTRA_FILE}" ]; then
         debug "Removing extra options (${MYSQL_EXTRA_FILE})"
@@ -626,16 +636,6 @@ cleanup()
             debug "Removing backup directory"
             rm -r ${BACKUP_DIR} 2>/dev/null
         fi
-    fi
-
-    # Start slave if it was stopped by us.
-    if check_yesno ${SLAVE_STOPPED}; then
-        ${MYSQL} ${MYSQL_AUTH_KEYS} -e "START SLAVE;"
-        if [ $? -ne 0 ]; then
-            error "Can't start slave"
-        fi
-        debug "Slave started"
-        SLAVE_STOPPED="no"
     fi
 
     # Release lockfile only if it was created by THIS process.
