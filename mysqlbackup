@@ -3,7 +3,7 @@
 #
 # MySQL backup tool.
 #
-# Copyright 2010-2012, Alexey V. Degtyarev <alexey@renatasystems.org>.
+# Copyright 2010-2013, Alexey Degtyarev <alexey@renatasystems.org>.
 # All rights reserved.
 #
 # $Id$
@@ -55,7 +55,7 @@ usage()
 {
     me=`basename $0`
     cat << EOF
-${me} creates everyday MySQL databases backup
+${me} meant to create MySQL databases backup on a periodic basis.
 
 Usage: ${me} [OPTIONS] [database [database [ ... ] ]]
 
