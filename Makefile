@@ -13,7 +13,6 @@ REMOTE_PATH=~/src
 
 VERSION=${NAME}-`head -1 VERSION`
 
-FILES=mysqlbackup 200.mysqlbackup.*
 DIRECTORIES=
 
 EXEC_AFTER=
@@ -36,16 +35,17 @@ deb: tarball
 tarball: clean
 	mkdir ${VERSION}
 	sed "s/VERSION/${VERSION}/g;" README > ${VERSION}/README
-	cp VERSION RELNOTES TODO LICENSE ${VERSION}
-	cp ${FILES} ${VERSION}
-	sed -i '' -E "s/%%VERSION%%/`head -1 VERSION`/g" \
-		 ${VERSION}/mysqlbackup
+	cp VERSION RELNOTES TODO LICENSE ${VERSION}/
+	cp 200.mysqlbackup.* ${VERSION}/
+	sed -E "s/%%VERSION%%/`head -1 VERSION`/g" \
+		 mysqlbackup > ${VERSION}/mysqlbackup
+	chmod 0755 ${VERSION}/mysqlbackup
 	help2man \
 		--version-option "-V" \
 		--help-option "-H" \
 		--no-info \
 		-n "creates MySQL backups on a periodic basis" \
-		--source="`date +%F`" \
+		--source="mysqlbackup `head -1 VERSION`" \
 		--opt-include=mysqlbackup.1.include \
 		--output=${VERSION}/mysqlbackup.1 \
 		${VERSION}/mysqlbackup
