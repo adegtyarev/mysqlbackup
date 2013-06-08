@@ -1,0 +1,28 @@
+### Commented entries have reasonable defaults.
+### Uncomment to edit them.
+# Source: <source package name; defaults to package name>
+Section: misc
+Priority: optional
+Homepage: https://code.google.com/p/mysqlbackup/
+Standards-Version: 3.9.2
+
+Package: mysqlbackup
+Version: %%VERSION%%
+Maintainer: Alexey Degtyarev <alexey@renatasystems.org>
+# Pre-Depends: <comma-separated list of packages>
+Depends: mysql-client
+# Recommends: <comma-separated list of packages>
+# Suggests: <comma-separated list of packages>
+# Provides: <comma-separated list of packages>
+# Replaces: <comma-separated list of packages>
+# Architecture: all
+Copyright: LICENSE
+# Changelog: <changelog to yet ready>
+# Readme: <README.Debian file; defaults to a generic one>
+# Extra-Files:
+Files: mysqlbackup.1.gz /usr/share/man/man1
+    mysqlbackup /usr/bin
+#  <more pairs, if there's more than one file to include. Notice the starting space>
+Description: creates MySQL databases backup on a periodic basis
+ long
+ .
