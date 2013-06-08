@@ -9,7 +9,7 @@
 # $Id$
 
 REVISION="$Revision$"
-VERSION="2.7-trunk"
+VERSION="2.7"
 
 # Some default values.
 DEFAULT_ARCHIVE_DAYS=5                # How long to keep backups.
