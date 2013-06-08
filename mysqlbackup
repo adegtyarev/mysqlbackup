@@ -9,7 +9,7 @@
 # $Id$
 
 REVISION="$Revision$"
-VERSION="2.8-trunk"
+VERSION="%%VERSION%%-trunk"
 
 # Some default values.
 DEFAULT_ARCHIVE_DAYS=5                # How long to keep backups.
@@ -147,9 +147,9 @@ EOF
 version() 
 {
     cat <<- EOF
-    $(basename $0) ${VERSION}
+$(basename $0) ${VERSION}
 
-    Written by Alexey V. Degtyarev
+Written by Alexey Degtyarev
 EOF
 
     # Do not debug cleanup() trap.
