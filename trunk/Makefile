@@ -1,4 +1,3 @@
-#!/bin/sh
 #
 # Source makefile
 #
@@ -12,7 +11,7 @@ REMOTE_USER=nice
 REMOTE_HOST=nice.renatasystems.org
 REMOTE_PATH=~/src
 
-VERSION=${NAME}-`/usr/bin/head -1 VERSION`
+VERSION=${NAME}-`head -1 VERSION`
 
 FILES=mysqlbackup 200.mysqlbackup.*
 DIRECTORIES=
@@ -22,50 +21,41 @@ EXEC_AFTER=
 .SILENT:
 
 all: clean tarball
+
+deb: tarball
+	mkdir equivs
+	sed -E "s/%%VERSION%%/`head -1 VERSION`/g" \
+		mysqlbackup.debian.in > equivs/mysqlbackup.debian
+	gzip -c ${VERSION}/mysqlbackup.1 > equivs/mysqlbackup.1.gz
+	cp ${VERSION}/mysqlbackup equivs/mysqlbackup
+	cp ${VERSION}/LICENSE equivs/LICENSE
+	cd equivs && equivs-build mysqlbackup.debian
+	mv equivs/mysqlbackup*.deb .
+	lintian mysqlbackup*.deb    
+
 tarball: clean
-	echo "Creating distributive of ${NAME}: ${VERSION}.${TARBALL_SFX}"
-	/bin/mkdir ${VERSION}
-	/usr/bin/sed "s/VERSION/${VERSION}/g;" README > ${VERSION}/README
-	/bin/cp VERSION RELNOTES TODO LICENSE ${VERSION}
-	if [ -f Makefile.in ]; then\
-		if [ -f ${VERSION}/Makefile ]; then\
-			echo "conflict: ${VERSION}/Makefile already exist.";\
-			exit 1;\
-		fi;\
-		/bin/cp Makefile.in ${VERSION}/Makefile;\
-	fi
-	if [ ! -z "${DIRECTORIES}" ]; then\
-		/bin/cp -R ${DIRECTORIES} ${VERSION};\
-	fi
-	if [ ! -z "${FILES}" ]; then\
-		/bin/cp ${FILES} ${VERSION};\
-	fi
-	if [ ! -z "${EXEC_AFTER}" ]; then\
-		exec "${EXEC_AFTER}";\
-	fi
-	/usr/bin/sed -i "" -e "s/%%VERSION%%/`/usr/bin/head -1 VERSION`/g" \
-		${VERSION}/mysqlbackup 
-	/usr/local/bin/help2man \
+	mkdir ${VERSION}
+	sed "s/VERSION/${VERSION}/g;" README > ${VERSION}/README
+	cp VERSION RELNOTES TODO LICENSE ${VERSION}
+	cp ${FILES} ${VERSION}
+	sed -i '' -E "s/%%VERSION%%/`head -1 VERSION`/g" \
+		 ${VERSION}/mysqlbackup
+	help2man \
 		--version-option "-V" \
 		--help-option "-H" \
 		--no-info \
-		--source=FreeBSD \
+		-n "creates MySQL backups on a periodic basis" \
+		--source="`date +%F`" \
 		--opt-include=mysqlbackup.1.include \
 		--output=${VERSION}/mysqlbackup.1 \
-		${VERSION}/mysqlbackup && \
-	echo "==>  manpage mysqlbackup(1) created"
-#	/usr/bin/nroff -mandoc <${VERSION}/mysqlbackup.1 |\
-#	/usr/local/bin/man2html -seealso -pgsize 1500 \
-#	-title "mysqlbackup - create everyday MySQL-databases backup" |\
-#	/usr/local/bin/tidy -quiet -asxml -utf8 >${VERSION}/mysqlbackup.html && \
-#	echo "==>  html page for mysqlbackup created"
-	/usr/bin/tar zcf ${VERSION}.${TARBALL_SFX} ${VERSION}
+		${VERSION}/mysqlbackup
+	tar zcf ${VERSION}.${TARBALL_SFX} ${VERSION}
 	echo "==>  tarball for ${VERSION} created"
 	tar tzf ${VERSION}.${TARBALL_SFX}
 
 upload: tarball
 	[ -f ${VERSION}.${TARBALL_SFX} ] || exit 1;
-	/bin/cat ${VERSION}.${TARBALL_SFX} | /usr/bin/ssh ${REMOTE_USER}@${REMOTE_HOST} "\
+	cat ${VERSION}.${TARBALL_SFX} | ssh ${REMOTE_USER}@${REMOTE_HOST} "\
 		cd ${REMOTE_PATH};\
 		if [ ! -d ${CATEGORY}/${NAME} ]; then\
 			/bin/mkdir -p ${CATEGORY}/${NAME};\
@@ -76,5 +66,7 @@ upload: tarball
 	echo "Done"
 
 clean:
-	if [ -d ${VERSION} ]; then /bin/rm -r "${VERSION}"/* && /bin/rmdir ${VERSION}; fi
-	if [ -f ${VERSION}.${TARBALL_SFX} ]; then /bin/rm ${VERSION}.${TARBALL_SFX}; fi
+	if [ -d ${VERSION} ]; then rm -r "${VERSION}"/* && rmdir ${VERSION}; fi
+	if [ -f ${VERSION}.${TARBALL_SFX} ]; then rm ${VERSION}.${TARBALL_SFX}; fi
+	rm -f mysqlbackup_*.deb
+	rm -rf equivs
