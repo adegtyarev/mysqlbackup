@@ -60,17 +60,18 @@ ${me} meant to create MySQL databases backup on a periodic basis.
 Usage: ${me} [OPTIONS] [database [database [ ... ] ]]
 
 Options:
-   -a                Dump all available databases.
+   -a                Dump all available databases except "information_schema"
+                     and "performance_schema" databases.
    -u user           The MySQL user name to use when connecting to the server.
    -h host           Connect to host.
-   -p password       Password to use when connecting to server. You should note
-                     that specifying a password on the command line should be
-                     considered insecure.
-   -P filename|ask   Read the clear password from the file. The file must
+   -p password       Password to use when connecting to server.  You should
+                     note that specifying a password on the command line should
+                     be considered insecure.  See the section named "SECURITY".
+   -P filename|ask   Read the clear password from the file.  The file must
                      normally not be readable by "others" and must contain
-                     exactly one line. Password will be prompted from the
+                     exactly one line.  Password will be prompted from the
                      command line if the special keyword "ask" specified here.
-   -o option|no      Additional mysqldump option. To specify multiple options
+   -o option|no      Additional mysqldump option.  To specify multiple options
                      you should repeat this key for each mysqldump-option.  The
                      default options are: ${DEFAULT_MYSQLDUMP_OPTIONS}.  To not
                      use the default options force "no" option.
@@ -80,12 +81,12 @@ Options:
                      The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
                      need).
    -z xz|bzip2|gzip|7z|no
-                     Compress dumps with specified program. Unless explicitly
+                     Compress dumps with specified program.  Unless explicitly
                      set or "no" keyword used, the compressor is selected in
                      the next order: if xz(1) compressor found in \$PATH, it
-                     will be used. If it not found, bzip2(1), gzip(1) and 7z(1)
-                     programs will be searched and used if found. If none
-                     found, plain dumps will be created. 
+                     will be used.  If it not found, bzip2(1), gzip(1) and
+                     7z(1) programs will be searched and used if found.  If
+                     none found, plain dumps will be created. 
    -F mode           Create files with given mode access permissions.
                      The default mode is ${DEFAULT_FILE_MODE}.
    -D mode           Create directories with given mode access permissions.
@@ -99,7 +100,7 @@ Options:
    -O yes|no|keys    Optimize tables before doing backup or use specified keys
                      for mysqlcheck(1) program while perfoming optimization.
                      Note that not all table engines supports table
-                     optimization. Please refer to "OPTIMIZE TABLE Syntax"
+                     optimization.  Please refer to "OPTIMIZE TABLE Syntax"
                      paragraph of MySQL documentation.
                      Default: ${DEFAULT_OPTIMIZE_TABLES},
                      keys: ${DEFAULT_MYSQLOPTIMIZE_OPTIONS}.
@@ -107,14 +108,14 @@ Options:
    -t seconds        Timeout in seconds to expire existing lockfile.
                      By default lockfile expires after ${DEFAULT_LOCKFILE_EXPIRE}
                      seconds.
-   -S                Slave mode. Under this mode mysqlbackup assumes it is
-                     running on MySQL slave. Then, prior to his work,
+   -S                Slave mode.  Under this mode mysqlbackup assumes it is
+                     running on MySQL slave.  Then, prior to his work,
                      mysqlbackup stops the slave and saves "SHOW SLAVE STATUS"
-                     output. After work is done, the slave is started up. The
+                     output.  After work is done, the slave is started up. The
                      output is saved to "${DEFAULT_SLAVE_STATUS_FILE}" file.
-   -I                Ignore errors while dumping database. mysqlbackup will not
-                     stop if mysqldump(1) running on any database will return
-                     an error.
+   -I                Ignore errors while dumping database.  mysqlbackup will
+                     not stop if mysqldump(1) running on any database will
+                     return an error.
    -v                Be verbose.
    -V                Print version and exit.
    -H                Print this help and exit.
@@ -128,7 +129,7 @@ Examples:
                              being compressed.
    mysqlbackup -a -P ask     You are prompted for password to backup all the
                              databases available under current user.
-   mysqlbackup -aS           Operate in slave mode. Save SLAVE STATUS for
+   mysqlbackup -aS           Operate in slave mode.  Save SLAVE STATUS for
                              further replication restore.
 
 Report bugs to <alexey@renatasystems.org>
@@ -865,7 +866,7 @@ get_databases()
         debug "Reading available databases"
         BACKUP_DATABASES=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
                     -e "SHOW DATABASES;" |\
-                egrep -v ^information_schema$`
+                    egrep -v "^(information_schema|performance_schema)$"`
         [ $? -eq 0 ] || error "Can't get available databases"
 
     else
