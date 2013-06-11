@@ -24,5 +24,5 @@ Files: mysqlbackup.1.gz /usr/share/man/man1
     mysqlbackup /usr/bin
 #  <more pairs, if there's more than one file to include. Notice the starting space>
 Description: creates MySQL databases backup on a periodic basis
- long
+ To get more info type `man mysqlbackup'.
  .
