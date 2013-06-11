@@ -865,7 +865,7 @@ get_databases()
         debug "Reading available databases"
         BACKUP_DATABASES=`${MYSQL} ${MYSQL_AUTH_KEYS} ${MYSQL_KEYS} \
                     -e "SHOW DATABASES;" |\
-                egrep -v ^information_schema$`
+                    egrep -v "^(information_schema|performance_schema)$"`
         [ $? -eq 0 ] || error "Can't get available databases"
 
     else
