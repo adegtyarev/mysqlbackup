@@ -92,7 +92,7 @@ Options:
                      call compressor program afterwards.  This help to make
                      MySQL locktime as small as possible.  If long locktime for
                      huge databases is not a problem but filesystem space usage
-                     is — use this key to save disk space.
+                     is - use this key to save disk space.
    -F mode           Create files with given mode access permissions.
                      The default mode is ${DEFAULT_FILE_MODE}.
    -D mode           Create directories with given mode access permissions.
