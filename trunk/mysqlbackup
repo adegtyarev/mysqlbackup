@@ -45,7 +45,7 @@ ASK_PASSWORD_TIMEOUT=60
 
 # Configurable options ends here.
 
-OPTIONS="au:h:p:P:o:l:d:z:F:D:m:C:O:L:t:SvVHI"
+OPTIONS="au:h:p:P:o:l:d:z:ZF:D:m:C:O:L:t:SvVHI"
 
 # These keys will be used while invoking mysql(1) program.
 : ${MYSQL_KEYS="--batch --silent"}
@@ -87,6 +87,12 @@ Options:
                      will be used.  If it not found, bzip2(1), gzip(1) and
                      7z(1) programs will be searched and used if found.  If
                      none found, plain dumps will be created. 
+   -Z                Pipeline mysqldump to compressor program.  By default,
+                     mysqlbackup create plain SQL dump for whole database and
+                     call compressor program afterwards.  This help to make
+                     MySQL locktime as small as possible.  If long locktime for
+                     huge databases is not a problem but filesystem space usage
+                     is — use this key to save disk space.
    -F mode           Create files with given mode access permissions.
                      The default mode is ${DEFAULT_FILE_MODE}.
    -D mode           Create directories with given mode access permissions.
@@ -115,7 +121,8 @@ Options:
                      output is saved to "${DEFAULT_SLAVE_STATUS_FILE}" file.
    -I                Ignore errors while dumping database.  mysqlbackup will
                      not stop if mysqldump(1) running on any database will
-                     return an error.
+                     return an error.  Excludes -Z because there is no way to
+                     detect which program has failed.
    -v                Be verbose.
    -V                Print version and exit.
    -H                Print this help and exit.
@@ -313,9 +320,10 @@ set_defaults()
     CLEANUP_LOCKFILE="no"
     SLAVE_MODE="no"
     SLAVE_STATUS_FILE=${DEFAULT_SLAVE_STATUS_FILE}
-    SLAVE_STOPPED="no"    # Did we stopped slave?
-    SLAVE_STOP="no"        # Do we need to stop slave?
-    IGNORE_ERRORS="no"  # Don't ignore errors, but rather exit on error.
+    SLAVE_STOPPED="no"      # Did we stopped slave?
+    SLAVE_STOP="no"         # Do we need to stop slave?
+    IGNORE_ERRORS="no"      # Don't ignore errors, but rather exit on error.
+    PIPELINE_COMPRESSOR="no"    # Pipeline mysqldump to compressor?
 
     COMPRESSOR=
     local c e
@@ -419,11 +427,18 @@ parse_options()
                 *) PATH_MYCNF=${OPTARG};;
             esac;;
             z) case ${OPTARG} in
-                xz|7z|gzip|bzip2) COMPRESSOR=${OPTARG};;
+                xz|7z|gzip|bzip2) 
+                    if ! which ${OPTARG} >/dev/null 2>/dev/null; then
+                        echo "${OPTARG} unavailable on this system"
+                        return 1
+                    fi
+                    COMPRESSOR=${OPTARG}
+                ;;
                 [Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
                 COMPRESSOR=no;;
-                *) echo "Wrong arg for -c option"; return 1;;
+                *) echo "Wrong arg for -z option"; return 1;;
             esac;;
+            Z) PIPELINE_COMPRESSOR="yes";;
             o) case ${OPTARG} in
                 [Nn][Oo]|[Ff][Aa][Ll][Ss][Ee]|[Oo][Ff][Ff]|0)
                 MYSQLDUMP_OPTIONS=;;
@@ -564,7 +579,7 @@ check_options()
     if [ ! -z "${MYSQL_PASSWORD}" ]; then
 
         # This will create temporary file only accessable by creator.
-        MYSQL_EXTRA_FILE=`mktemp /var/tmp/mysqlbackup.XXXXXX` || \
+        MYSQL_EXTRA_FILE=`mktemp -t mysqlbackup.XXXXXX` || \
         { echo "Cannot create temporary file"; return 1; }
 
         # Write the password. Handling carefully with Ubuntu's Linux
@@ -582,6 +597,20 @@ EOF
     [ "${LOCKFILE_EXPIRE}" -gt 0 ] >/dev/null 2>&1 ||\
         { echo "Timeout value must be numeric number of seconds" &&
         return 1; }
+
+    # "-z no -Z" — conflicting combination.
+    if [ "${COMPRESSOR}" == "no" ] && \
+        check_yesno "${PIPELINE_COMPRESSOR}" ; then
+        echo "You didn't set compressor — nowhere to pipeline"
+        return 1
+    fi
+
+    # There is no way to detect which command force error.
+    if check_yesno "${PIPELINE_COMPRESSOR}" && \
+        check_yesno "${IGNORE_ERRORS}" ; then
+        echo "Meaningless options: -I in conjunction with -Z."
+        return 1
+    fi
 
     # Seems that all is ok.
     return 0
@@ -891,29 +920,189 @@ get_databases()
     return 0
 }
 
+# Set ${OUTPUT_SUFFIX} to suffix according to selected comressor program.
+# Arguments:
+#   None.
+# Return:
+#   0: OK
+#  >0: NOK
+set_output_suffix()
+{
+    # Select correct compressor program and suffix.
+    case ${COMPRESSOR} in
+        xz)
+            SUFFIX="sql.xz"
+            ;;
+        gzip)
+            SUFFIX="sql.gz"
+            ;;
+        bzip2)
+            SUFFIX="sql.bz2"
+            ;;
+        7z) 
+            SUFFIX="sql.7z"
+            ;;
+        no)
+            SUFFIX="sql"
+            ;;
+        *) 
+            return 1
+    esac
+
+    return 0
+}
+
+# Dump database and compress it inline by pipelining compressor.
+# Arguments:
+#   $1: database to dump
+#   $2: outputfile NOT including compressor suffix
+# Return:
+#   0: OK
+#  >0: NOK
+dump_pipe_compress()
+{
+    [ $# -eq 2 ] || return 1
+
+    _db=$1
+    _out_file=$2
+
+    set_output_suffix || return 1
+
+    # If compressor is not set to valid compressor program, abort to do
+    # pipeline.
+    if [ "${SUFFIX}" == "sql" ]; then
+        error "Nowere to pipeline"
+    fi
+
+    debug "${_db}: creating compressed SQL-dump"
+
+    case ${COMPRESSOR} in
+        xz|bzip2|gzip)
+            ${MYSQLDUMP}                                \
+                ${MYSQL_AUTH_KEYS}                      \
+                ${MYSQLDUMP_OPTIONS}                    \
+                ${_db}                                  \
+            | ${COMPRESSOR} > ${_out_file}.${SUFFIX}    \
+            || return 1
+        ;;
+        7z)
+            ${MYSQLDUMP}                    \
+                ${MYSQL_AUTH_KEYS}          \
+                ${MYSQLDUMP_OPTIONS}        \
+                ${_db}                      \
+            | ${COMPRESSOR} -bd a -si       \
+                ${_out_file}.${SUFFIX}      \
+                >/dev/null                  \
+            || return 1
+        ;;
+    esac
+
+    chmod ${FILE_MODE} ${_out_file}.${SUFFIX} || return 1
+
+    debug "${_db}: dumped and compressed"
+
+    return 0
+}
+
+# Arguments:
+#   $1: database to dump
+#   $2: filename where to dump
+dump_database()
+{
+    [ $# -eq 2 ] || return 1
+
+    _db=$1
+    _out_file=$2
+
+    # Invoke mysqldump(1) for database
+    debug "${db}: dumping"
+    ${MYSQLDUMP} \
+        ${MYSQL_AUTH_KEYS} \
+        ${MYSQLDUMP_OPTIONS} \
+        ${db} > ${_out_file}
+    _rc=$?
+
+    if [ ${_rc} -ne 0 ]; then
+        # Are we forced to ignore any errors?
+        if ! check_yesno ${IGNORE_ERRORS} ; then
+            debug "${db}: error occurred (rc=${_rc})"
+            return ${_rc}
+        fi
+        debug "${db}: error occurred (rc=${_rc}), ignored"
+    else
+        debug "${db}: dumped"
+    fi
+        
+    return 0
+}
+
+# Compress SQL dump using given compressor.
+# Arguments:
+#   $1: filename to compress
+# Return:
+#       0: ok
+#   not 0: error occurred
+compress_dump()
+{
+    [ $# -eq 1 ] || return 1
+
+    _out_file=$1
+
+    set_output_suffix || return 1
+
+    # Nothing to do?
+    if [ "${SUFFIX}" == "sql" ]; then
+        mv ${_out_file} ${_out_file}.sql
+        chmod ${FILE_MODE} ${_out_file}.sql
+        return 0
+    fi
+
+    debug "${db}: compressing"
+    case ${COMPRESSOR} in
+        xz|bzip2|gzip)
+            ${COMPRESSOR} --stdout ${_out_file}     \
+                > ${_out_file}.${SUFFIX} ||         \
+                return $?
+        ;;
+        7z)
+            # If verbose mode is inactive - volume
+            # down 7z compressor. I can't find any
+            # tunes to disable all the output from
+            # this compressor.
+            if ! check_yesno ${DEBUG} ; then
+                ${COMPRESSOR} -bd a         \
+                ${_out_file}.${SUFFIX}      \
+                ${_out_file} 1>/dev/null || \
+                return $?
+            else
+                ${COMPRESSOR} -bd a     \
+                ${_out_file}.${SUFFIX}  \
+                ${_out_file} ||         \
+                return $?
+            fi
+        ;;
+    esac
+    debug "${db}: compressed"
+
+    rm ${_out_file}
+
+    chmod ${FILE_MODE} ${_out_file}.${SUFFIX} || return 1
+
+    return 0
+}
+
 # Backup databases.
 do_backup() 
 {
     [ ! -z "${BACKUP_DATABASES}" ] || return 0
 
-    # Select correct compressor program and suffix.
-    case ${COMPRESSOR} in
-        xz) _compressor=`which xz || echo cat`;
-        _suffix="sql.xz";;
-        gzip) _compressor=`which gzip || echo cat`;
-        _suffix="sql.gz";;
-        bzip2) _compressor=`which bzip2 || echo cat`;
-        _suffix="sql.bz2";;
-        7z) _compressor=`which 7z || echo cat`;
-        _suffix="sql.7z";;
-        *) _compressor=`which cat`; _suffix="sql";;
-    esac
-
-    [ -z "${_compressor}" -o ! -x "${_compressor}" ] && \
-        error "Can not find compressor or any pager program"
-
-    [ "${_compressor##*/}" = "cat" ] && _suffix="sql"
-    debug "Using \`${_compressor}' program as compressor"
+    if check_yesno "${PIPELINE_COMPRESSOR}"; then
+        debug "Compression will use pipeline to ${COMPRESSOR}"
+    elif [ "${COMPRESSOR}" != "no" ]; then
+        debug "Using ${COMPRESSOR} as compressor"
+    else
+        debug "Not using compresion"
+    fi
 
     _check_tables="no"
     if check_yesno ${CHECK_TABLES}; then
@@ -1043,61 +1232,13 @@ do_backup()
         fi
 
         local _out_file=${BACKUP_DIR}/${db}
-        # Invoke mysqldump(1) for database
-        debug "${db}: dumping"
-        ${MYSQLDUMP} \
-            ${MYSQL_AUTH_KEYS} \
-            ${MYSQLDUMP_OPTIONS} \
-            ${db} > ${_out_file}
-        _rc=$?
 
-        if [ ${_rc} -ne 0 ]; then
-            # Are we forced to ignore any errors?
-            if ! check_yesno ${IGNORE_ERRORS} ; then
-                debug "${db}: error occurred (rc=${_rc})"
-                return ${_rc}
-            fi
-            debug "${db}: error occurred (rc=${_rc}), ignored"
+        if check_yesno ${PIPELINE_COMPRESSOR}; then
+            dump_pipe_compress "${db}" "${_out_file}" || return 1
         else
-            debug "${db}: dumped"
+            dump_database "${db}" "${_out_file}" || return 1
+            compress_dump "${_out_file}"    || return 1
         fi
-        
-        if [ "${_compressor##*/}" != "cat" ]; then
-
-            debug "${db}: compressing"
-            case ${_compressor} in
-                */xz|*/bzip2|*/gzip)
-                    ${_compressor} --stdout ${_out_file} \
-                        > ${_out_file}.${_suffix} || \
-                        return $?
-                ;;
-                */7z)
-                    # If verbose mode is inactive - volume
-                    # down 7z compressor. I can't find any
-                    # tunes to disable all the output from
-                    # this compressor.
-                    if ! check_yesno ${DEBUG} ; then
-                        ${_compressor} -bd a \
-                        ${_out_file}.${_suffix} \
-                        ${_out_file} 1>/dev/null || \
-                        return $?
-                    else
-                        ${_compressor} -bd a \
-                        ${_out_file}.${_suffix} \
-                        ${_out_file} || \
-                        return $?
-                    fi
-                ;;
-            esac
-            debug "${db}: compressed"
-
-            rm ${_out_file}
-
-            _out_file=${_out_file}.${_suffix}
-        fi
-
-        # Set file mode
-        chmod ${FILE_MODE} ${_out_file}
     done
 
     # Backup my.cnf
@@ -1159,9 +1300,9 @@ set_defaults
 
 [ $# -eq 0 ] && usage
 
-parse_options $@ || usage 1
+parse_options $@ || exit 255
 
-check_options || exit
+check_options || exit 255
 
 trap cleanup EXIT
 
@@ -1173,10 +1314,10 @@ check_lockfile && touch_lockfile || exit
 CLEANUP_LOCKFILE="yes"
 
 # Define authorization credentials if they are set.
-[ ! -z ${MYSQL_USER} ] && \
+[ ! -z "${MYSQL_USER}" ] && \
     MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --user=${MYSQL_USER}"
 
-[ ! -z ${MYSQL_HOST} ] && \
+[ ! -z "${MYSQL_HOST}" ] && \
     MYSQL_AUTH_KEYS="${MYSQL_AUTH_KEYS} --host=${MYSQL_HOST}"
 
 # Use shortcuts for signals to deal with Linux's sh.
