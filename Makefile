@@ -25,7 +25,7 @@ deb: tarball
 	mkdir equivs
 	sed -E "s/%%VERSION%%/`head -1 VERSION`/g" \
 		mysqlbackup.debian.in > equivs/mysqlbackup.debian
-	gzip -c ${VERSION}/mysqlbackup.1 > equivs/mysqlbackup.1.gz
+	gzip -9 -c ${VERSION}/mysqlbackup.1 > equivs/mysqlbackup.1.gz
 	cp ${VERSION}/mysqlbackup equivs/mysqlbackup
 	cp ${VERSION}/LICENSE equivs/LICENSE
 	cd equivs && equivs-build mysqlbackup.debian
