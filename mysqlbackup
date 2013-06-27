@@ -599,7 +599,7 @@ EOF
         return 1; }
 
     # "-z no -Z" — conflicting combination.
-    if [ "${COMPRESSOR}" == "no" ] && \
+    if [ "${COMPRESSOR}" = "no" ] && \
         check_yesno "${PIPELINE_COMPRESSOR}" ; then
         echo "You didn't set compressor — nowhere to pipeline"
         return 1
@@ -970,7 +970,7 @@ dump_pipe_compress()
 
     # If compressor is not set to valid compressor program, abort to do
     # pipeline.
-    if [ "${SUFFIX}" == "sql" ]; then
+    if [ "${SUFFIX}" = "sql" ]; then
         error "Nowere to pipeline"
     fi
 
@@ -1051,7 +1051,7 @@ compress_dump()
     set_output_suffix || return 1
 
     # Nothing to do?
-    if [ "${SUFFIX}" == "sql" ]; then
+    if [ "${SUFFIX}" = "sql" ]; then
         mv ${_out_file} ${_out_file}.sql
         chmod ${FILE_MODE} ${_out_file}.sql
         return 0
