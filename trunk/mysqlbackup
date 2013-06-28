@@ -233,8 +233,19 @@ check_process()
     [ -f $1 -a -r $1 ] || return 1
 
     # Take the process name and arguments from process tree.
-    # Linux users need to use some other command.
-    _procname="`pgrep -j none -F $1 -l -f`"
+    case ${UNAME_s} in
+        Linux)
+            _pid="`cat $1`"
+            _procname="`pgrep -l -f mysqlbackup |grep ^${_pid}`"
+            ;;
+        FreeBSD)
+            _procname="`pgrep -j none -F $1 -l -f`"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
     if [ $? -ne 0 ]; then
         return 3
     fi
