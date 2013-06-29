@@ -59,6 +59,12 @@ for details.
 installation prefix. All used MySQL binaries (mysqldump, mysql, mysqlcheck)
 will be searched within this prefix at `bin' directory.
 
+\fBDEBUG_IDENT\fR environment variable controls log messages appearance.  In
+verbose mode, by default, log messages from \fBmysqlbackup\fR prefixed with
+timestamp, process name and PID.  When logging to syslog this may not be
+desired.  To disable prefix in log messages, set DEBUG_IDENT environment to
+"no".
+
 [SECURITY]
 You should keep your password in secure.
 
