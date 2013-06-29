@@ -336,6 +336,8 @@ set_defaults()
     IGNORE_ERRORS="no"      # Don't ignore errors, but rather exit on error.
     PIPELINE_COMPRESSOR="no"    # Pipeline mysqldump to compressor?
 
+    : ${DEBUG_IDENT="yes"}
+
     COMPRESSOR=
     local c e
     for c in xz bzip2 gzip 7z; do
@@ -627,20 +629,35 @@ EOF
     return 0
 }
 
-# Output $@ if debug flag is enabled.
+# Output $@ if debug flag is enabled. When DEBUG_IDENT is "yes", append
+# identification information: timestamp, selfname, pid.
 debug() 
 {
     check_yesno ${DEBUG} || return 0
-    echo "`date +%c` `basename $0` [$$]: $@"
+
+    msgprefix=
+    if check_yesno ${DEBUG_IDENT}; then
+        msgprefix="`date +%c` `basename $0` [$$]: "
+    fi
+
+    echo "${msgprefix}$@"
+
     return 0
 }
 
 # This will raise error end exit with custom error code if given as $1
-# argument.
+# argument. When DEBUG_IDENT is "yes", append identification information:
+# timestamp, selfname, pid.
 error()
 {
     check_yesno ${DEBUG} || debug $@
-    echo "`date +%c` `basename $0` [$$]: $@"
+
+    msgprefix=
+    if check_yesno ${DEBUG_IDENT}; then
+        msgprefix="`date +%c` `basename $0` [$$]: "
+    fi
+
+    echo "${msgprefix}$@"
 
     [ ! -z "$1" ] && code=1 || code=$?
 
