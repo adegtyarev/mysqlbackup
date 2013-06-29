@@ -1,6 +1,12 @@
 
   $Id$
 
+2.8:
+- Linux .deb package periodic scripts + manpage updates for that changes;
+- Implement defaults-(extra-)file as command line options (to use with Linux'
+  /etc/mysql/debian.cnf);
+- Selfcheck for monitoring to indicate when backups are stale or ok;
+
 2.x:
 - stderr support
 - support for make -j flag (multijobs on a table-level)
