@@ -6,9 +6,9 @@
 # Copyright 2010-2013, Alexey Degtyarev <alexey@renatasystems.org>.
 # All rights reserved.
 #
-# $Id: mysqlbackup 389 2013-06-29 13:17:30Z degtyarev.alexey $
+# $Id$
 
-REVISION="$Revision: 389 $"
+REVISION="$Revision$"
 VERSION="%%VERSION%%-trunk"
 
 # Some default values.
