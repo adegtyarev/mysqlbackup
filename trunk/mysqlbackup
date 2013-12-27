@@ -6,9 +6,9 @@
 # Copyright 2010-2013, Alexey Degtyarev <alexey@renatasystems.org>.
 # All rights reserved.
 #
-# $Id$
+# $Id: mysqlbackup 389 2013-06-29 13:17:30Z degtyarev.alexey $
 
-REVISION="$Revision$"
+REVISION="$Revision: 389 $"
 VERSION="%%VERSION%%-trunk"
 
 # Some default values.
@@ -80,7 +80,7 @@ Options:
    -d directory      Target directory to archive backups.
                      The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
                      need).
-   -z xz|bzip2|gzip|7z|no
+   -z xz|pbzip2|bzip2|gzip|7z|no
                      Compress dumps with specified program.  Unless explicitly
                      set or "no" keyword used, the compressor is selected in
                      the next order: if xz(1) compressor found in \$PATH, it
@@ -340,7 +340,7 @@ set_defaults()
 
     COMPRESSOR=
     local c e
-    for c in xz bzip2 gzip 7z; do
+    for c in xz pbzip2 bzip2 gzip 7z; do
         e=`which $c`
         if [ -x "$e" ]; then
             COMPRESSOR=${e##*/}
@@ -440,7 +440,7 @@ parse_options()
                 *) PATH_MYCNF=${OPTARG};;
             esac;;
             z) case ${OPTARG} in
-                xz|7z|gzip|bzip2) 
+                xz|7z|gzip|bzip2|pbzip2) 
                     if ! which ${OPTARG} >/dev/null 2>/dev/null; then
                         echo "${OPTARG} unavailable on this system"
                         return 1
@@ -964,7 +964,7 @@ set_output_suffix()
         gzip)
             SUFFIX="sql.gz"
             ;;
-        bzip2)
+        bzip2|pbzip2)
             SUFFIX="sql.bz2"
             ;;
         7z) 
@@ -1005,7 +1005,7 @@ dump_pipe_compress()
     debug "${_db}: creating compressed SQL-dump"
 
     case ${COMPRESSOR} in
-        xz|bzip2|gzip)
+        xz|pbzip2|bzip2|gzip)
             ${MYSQLDUMP}                                \
                 ${MYSQL_AUTH_KEYS}                      \
                 ${MYSQLDUMP_OPTIONS}                    \
@@ -1087,7 +1087,7 @@ compress_dump()
 
     debug "${db}: compressing"
     case ${COMPRESSOR} in
-        xz|bzip2|gzip)
+        xz|pbzip2|bzip2|gzip)
             ${COMPRESSOR} --stdout ${_out_file}     \
                 > ${_out_file}.${SUFFIX} ||         \
                 return $?
