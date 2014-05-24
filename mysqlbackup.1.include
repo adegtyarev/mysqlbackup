@@ -83,6 +83,8 @@ in the [client] section of the \fI.my.cnf\fR file in your home directory:
 To keep the password safe, the file should not be accessible to anyone but
 yourself. To ensure this, set the file access mode to \fB400\fR or \fB600\fR.
 
+Users of MySQL 5.6+ may use "login path" feature with \fB-x\fR option.
+
 [AVAILABILITY]
 The latest version of this distribution is available on-line from:
 

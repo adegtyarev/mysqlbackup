@@ -3,7 +3,7 @@
 #
 # MySQL backup tool.
 #
-# Copyright 2010-2013, Alexey Degtyarev <alexey@renatasystems.org>.
+# Copyright 2010-2014, Alexey Degtyarev <alexey@renatasystems.org>.
 # All rights reserved.
 #
 # $Id$
@@ -45,7 +45,7 @@ ASK_PASSWORD_TIMEOUT=60
 
 # Configurable options ends here.
 
-OPTIONS="au:h:p:P:o:l:d:z:ZF:D:m:C:O:L:t:SvVHI"
+OPTIONS="au:h:p:P:x:o:l:d:z:ZF:D:m:C:O:L:t:SvVHI"
 
 # These keys will be used while invoking mysql(1) program.
 : ${MYSQL_KEYS="--batch --silent"}
@@ -71,6 +71,7 @@ Options:
                      normally not be readable by "others" and must contain
                      exactly one line.  Password will be prompted from the
                      command line if the special keyword "ask" specified here.
+   -x login-path     MySQL login-path
    -o option|no      Additional mysqldump option.  To specify multiple options
                      you should repeat this key for each mysqldump-option.  The
                      default options are: ${DEFAULT_MYSQLDUMP_OPTIONS}.  To not
@@ -310,6 +311,7 @@ set_defaults()
     MYSQL_HOST=
     MYSQL_PASSWORD=
     MYSQL_PASSWORD_FILE=
+    MYSQL_LOGIN_PATH=
     MYSQLDUMP_OPTIONS=${DEFAULT_MYSQLDUMP_OPTIONS}
     MYSQLCHECK_OPTIONS=${DEFAULT_MYSQLCHECK_OPTIONS}
     MYSQLOPTIMIZE_OPTIONS=${DEFAULT_MYSQLOPTIMIZE_OPTIONS}
@@ -416,6 +418,7 @@ parse_options()
             h) MYSQL_HOST=${OPTARG};;
             p) MYSQL_PASSWORD=${OPTARG};;
             P) MYSQL_PASSWORD_FILE=${OPTARG};;
+            x) MYSQL_LOGIN_PATH=${OPTARG};;
             l) ARCHIVE_DAYS=${OPTARG};;
             d) ARCHIVE_DIR=${OPTARG};;
             a) DUMP_ALL="yes";;
@@ -516,6 +519,18 @@ check_options()
         fi
     done
 
+    # Can't specify both login path and password/password file/user/host
+    if [ ! -z "${MYSQL_LOGIN_PATH}" ]; then
+        if [ ! -z "${MYSQL_PASSWORD}" -o \
+             ! -z "${MYSQL_PASSWORD_FILE}" -o \
+             ! -z "${MYSQL_HOST}" -o \
+             ! -z "${MYSQL_USER}" ]; then
+            echo "The -x and -P -p -u -h options are mutually exclusive"
+            return 1
+        fi
+    fi
+
+
     # Can't specify both password and password file.
     if [ ! -z "${MYSQL_PASSWORD}" -a \
         ! -z "${MYSQL_PASSWORD_FILE}" ]; then
@@ -552,6 +567,11 @@ check_options()
 
         # Flush password file variable.
         MYSQL_PASSWORD_FILE=
+    fi
+
+    # Login path given, use it
+    if [ ! -z "${MYSQL_LOGIN_PATH}" ]; then
+        MYSQL_AUTH_KEYS="--login-path=${MYSQL_LOGIN_PATH}"
     fi
 
     # Password file given, let's check if it is ok.
