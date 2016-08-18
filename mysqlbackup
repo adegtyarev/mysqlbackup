@@ -81,13 +81,13 @@ Options:
    -d directory      Target directory to archive backups.
                      The default is ${DEFAULT_ARCHIVE_DIR} (will be created if
                      need).
-   -z xz|pbzip2|bzip2|gzip|7z|no
+   -z pixz|xz|pbzip2|bzip2|gzip|7z|no
                      Compress dumps with specified program.  Unless explicitly
                      set or "no" keyword used, the compressor is selected in
-                     the next order: if xz(1) compressor found in \$PATH, it
-                     will be used.  If it not found, bzip2(1), gzip(1) and
-                     7z(1) programs will be searched and used if found.  If
-                     none found, plain dumps will be created. 
+                     the next order: if pixz(1) or xz(1) compressor found in
+                     \$PATH, it will be used.  If it not found, bzip2(1),
+                     gzip(1) and 7z(1) programs will be searched and used if
+                     found.  If none found, plain dumps will be created.
    -Z                Pipeline mysqldump to compressor program.  By default,
                      mysqlbackup create plain SQL dump for whole database and
                      call compressor program afterwards.  This help to make
@@ -342,7 +342,7 @@ set_defaults()
 
     COMPRESSOR=
     local c e
-    for c in xz pbzip2 bzip2 gzip 7z; do
+    for c in pixz xz pbzip2 bzip2 gzip 7z; do
         e=`which $c`
         if [ -x "$e" ]; then
             COMPRESSOR=${e##*/}
@@ -443,7 +443,7 @@ parse_options()
                 *) PATH_MYCNF=${OPTARG};;
             esac;;
             z) case ${OPTARG} in
-                xz|7z|gzip|bzip2|pbzip2) 
+                pixz|xz|7z|gzip|bzip2|pbzip2)
                     if ! which ${OPTARG} >/dev/null 2>/dev/null; then
                         echo "${OPTARG} unavailable on this system"
                         return 1
@@ -978,7 +978,7 @@ set_output_suffix()
 {
     # Select correct compressor program and suffix.
     case ${COMPRESSOR} in
-        xz)
+        xz|pixz)
             SUFFIX="sql.xz"
             ;;
         gzip)
@@ -1025,7 +1025,7 @@ dump_pipe_compress()
     debug "${_db}: creating compressed SQL-dump"
 
     case ${COMPRESSOR} in
-        xz|pbzip2|bzip2|gzip)
+        pixz|xz|pbzip2|bzip2|gzip)
             ${MYSQLDUMP}                                \
                 ${MYSQL_AUTH_KEYS}                      \
                 ${MYSQLDUMP_OPTIONS}                    \
@@ -1109,6 +1109,11 @@ compress_dump()
     case ${COMPRESSOR} in
         xz|pbzip2|bzip2|gzip)
             ${COMPRESSOR} --stdout ${_out_file}     \
+                > ${_out_file}.${SUFFIX} ||         \
+                return $?
+        ;;
+        pixz)
+            ${COMPRESSOR} < ${_out_file}            \
                 > ${_out_file}.${SUFFIX} ||         \
                 return $?
         ;;
